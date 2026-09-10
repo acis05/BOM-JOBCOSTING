@@ -1,0 +1,1 @@
+import Header from '@/components/Header';import BomForm from '@/components/BomForm';export default function Page(){return <><Header title="New BOM" subtitle="Formula standar sebelum dibuat menjadi Work Order."/><BomForm/></>}

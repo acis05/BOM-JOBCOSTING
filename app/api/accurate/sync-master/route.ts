@@ -1,0 +1,1 @@
+import{getConnection}from'@/lib/accurate';export async function POST(){const c=await getConnection();if(!c?.api_host||!c?.session_id)return Response.json({error:'Pilih/open database Accurate dulu.'},{status:400});return Response.json({ok:true,message:'Koneksi database siap. Endpoint sync item/warehouse akan dipasang setelah scope final dari Developer API Anda dikonfirmasi.'})}
