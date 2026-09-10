@@ -1,5 +1,40 @@
 import {query} from '@/lib/db';
 
-export async function getConnection(){const r=await query<any>('SELECT * FROM accurate_connections ORDER BY id DESC LIMIT 1');return r.rows[0]||null}
-export function oauthAuthorizeUrl(){const u=new URL('https://account.accurate.id/oauth/authorize');u.searchParams.set('client_id',process.env.ACCURATE_CLIENT_ID||'');u.searchParams.set('response_type','code');u.searchParams.set('redirect_uri',process.env.ACCURATE_REDIRECT_URI||'');u.searchParams.set('scope',process.env.ACCURATE_SCOPE||'item_view');return u.toString()}
-export async function accurateFetch(path:string, init:RequestInit={}){const c=await getConnection();if(!c?.access_token)throw new Error('Accurate belum terhubung');if(!c?.api_host||!c?.session_id)throw new Error('Database Accurate belum dibuka');const url=path.startsWith('http')?path:`${c.api_host}${path}`;const headers=new Headers(init.headers);headers.set('Authorization',`Bearer ${c.access_token}`);headers.set('X-Session-ID',c.session_id);return fetch(url,{...init,headers,redirect:'follow'});}
+export async function getConnection(){
+  const r=await query<any>('SELECT * FROM accurate_connections ORDER BY id DESC LIMIT 1');
+  return r.rows[0]||null;
+}
+
+export function publicBaseUrl(fallback?:string){
+  if(process.env.APP_URL) return process.env.APP_URL.replace(/\/$/,'');
+  if(process.env.ACCURATE_REDIRECT_URI){
+    try{return new URL(process.env.ACCURATE_REDIRECT_URI).origin}catch{}
+  }
+  return (fallback||'http://localhost:3000').replace(/\/$/,'');
+}
+
+export function oauthAuthorizeUrl(){
+  const u=new URL('https://account.accurate.id/oauth/authorize');
+  u.searchParams.set('client_id',process.env.ACCURATE_CLIENT_ID||'');
+  u.searchParams.set('response_type','code');
+  u.searchParams.set('redirect_uri',process.env.ACCURATE_REDIRECT_URI||'');
+  u.searchParams.set('scope',process.env.ACCURATE_SCOPE||'item_view warehouse_view glaccount_view job_order_save roll_over_save');
+  return u.toString();
+}
+
+export async function accurateFetch(path:string, init:RequestInit={}){
+  const c=await getConnection();
+  if(!c?.access_token)throw new Error('Accurate Online belum terhubung');
+  if(!c?.api_host||!c?.session_id)throw new Error('Database Accurate belum dipilih');
+  const base=String(c.api_host).endsWith('/')?String(c.api_host):String(c.api_host)+'/';
+  const url=path.startsWith('http')?path:new URL(path.replace(/^\//,''),base).toString();
+  const headers=new Headers(init.headers);
+  headers.set('Authorization',`Bearer ${c.access_token}`);
+  headers.set('X-Session-ID',c.session_id);
+  return fetch(url,{...init,headers,redirect:'follow',cache:'no-store'});
+}
+
+export function accurateDate(v:string|Date){
+  const d=new Date(v); const dd=String(d.getUTCDate()).padStart(2,'0'); const mm=String(d.getUTCMonth()+1).padStart(2,'0');
+  return `${dd}/${mm}/${d.getUTCFullYear()}`;
+}

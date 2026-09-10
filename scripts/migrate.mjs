@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS warehouses_cache(
  id SERIAL PRIMARY KEY, accurate_id BIGINT UNIQUE, code TEXT, name TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE TABLE IF NOT EXISTS accounts_cache(
- id SERIAL PRIMARY KEY, accurate_id BIGINT UNIQUE, account_no TEXT, name TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW()
+ id SERIAL PRIMARY KEY, accurate_id BIGINT UNIQUE, account_no TEXT UNIQUE, name TEXT NOT NULL, account_type TEXT, updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE TABLE IF NOT EXISTS boms(
  id BIGSERIAL PRIMARY KEY, bom_no TEXT UNIQUE NOT NULL, name TEXT NOT NULL, product_item_no TEXT NOT NULL, product_name TEXT NOT NULL,
@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS approval_logs(
 CREATE TABLE IF NOT EXISTS sync_logs(
  id BIGSERIAL PRIMARY KEY, entity_type TEXT NOT NULL, entity_id TEXT, action TEXT NOT NULL, status TEXT NOT NULL, message TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE accounts_cache ADD COLUMN IF NOT EXISTS account_type TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_cache_no ON accounts_cache(account_no);
 CREATE INDEX IF NOT EXISTS idx_wo_status ON work_orders(status);
 CREATE INDEX IF NOT EXISTS idx_bom_materials_bom ON bom_materials(bom_id);
 CREATE INDEX IF NOT EXISTS idx_wo_materials_wo ON work_order_materials(work_order_id);
