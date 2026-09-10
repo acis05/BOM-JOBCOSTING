@@ -86,7 +86,7 @@ APP_URL=
 ACCURATE_CLIENT_ID=
 ACCURATE_CLIENT_SECRET=
 ACCURATE_REDIRECT_URI=
-ACCURATE_SCOPE=item_view warehouse_view account_view
+ACCURATE_SCOPE=item_view warehouse_view glaccount_view job_order_save roll_over_save
 ACCURATE_JOB_SAVE_PATH=
 ```
 
