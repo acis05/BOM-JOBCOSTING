@@ -115,8 +115,14 @@ CREATE TABLE IF NOT EXISTS items_cache(
  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE items_cache ADD COLUMN IF NOT EXISTS organization_id BIGINT REFERENCES organizations(id);
+-- Legacy single-tenant versions created global UNIQUE constraints.
+-- They must be removed before the same Accurate IDs can exist in different organizations.
 ALTER TABLE items_cache DROP CONSTRAINT IF EXISTS items_cache_item_no_key;
+ALTER TABLE items_cache DROP CONSTRAINT IF EXISTS items_cache_accurate_id_key;
+DROP INDEX IF EXISTS items_cache_item_no_key;
+DROP INDEX IF EXISTS items_cache_accurate_id_key;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_items_cache_org_no ON items_cache(organization_id,item_no);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_items_cache_org_accurate_id ON items_cache(organization_id,accurate_id) WHERE accurate_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS warehouses_cache(
  id SERIAL PRIMARY KEY,
