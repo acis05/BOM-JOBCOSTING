@@ -22,12 +22,20 @@ export function oauthAuthorizeUrl(){
   return u.toString();
 }
 
+function buildAccurateDataUrl(host:string,path:string){
+  const base=host.endsWith('/')?host:host+'/';
+  const clean=path.replace(/^\//,'');
+  // API Accurate (item, warehouse, job-order, roll-over, dll.) wajib berada di /accurate/api/...
+  // sedangkan API dasar seperti db-list/open-db menggunakan account.accurate.id dan tidak melewati fungsi ini.
+  const normalized=clean.startsWith('accurate/')?clean:`accurate/${clean}`;
+  return new URL(normalized,base).toString();
+}
+
 export async function accurateFetch(path:string, init:RequestInit={}){
   const c=await getConnection();
   if(!c?.access_token)throw new Error('Accurate Online belum terhubung');
   if(!c?.api_host||!c?.session_id)throw new Error('Database Accurate belum dipilih');
-  const base=String(c.api_host).endsWith('/')?String(c.api_host):String(c.api_host)+'/';
-  const url=path.startsWith('http')?path:new URL(path.replace(/^\//,''),base).toString();
+  const url=path.startsWith('http')?path:buildAccurateDataUrl(String(c.api_host),path);
   const headers=new Headers(init.headers);
   headers.set('Authorization',`Bearer ${c.access_token}`);
   headers.set('X-Session-ID',c.session_id);
