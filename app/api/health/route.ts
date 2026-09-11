@@ -1,1 +1,4 @@
-import {query} from '@/lib/db'; export async function GET(){try{await query('SELECT 1');return Response.json({status:'ok'})}catch(e){return Response.json({status:'error'},{status:503})}}
+export const dynamic='force-dynamic';
+export async function GET(){
+  return Response.json({status:'ok',app:'BOM-JOBCOSTING AOL',version:'0.2.2',databaseConfigured:Boolean(process.env.DATABASE_URL)});
+}

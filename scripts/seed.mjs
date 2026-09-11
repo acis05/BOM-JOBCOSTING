@@ -1,6 +1,6 @@
 import pg from 'pg'; const {Client}=pg;
 if(!process.env.DATABASE_URL) throw new Error('DATABASE_URL belum di-set');
-const c=new Client({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_URL.includes('railway')?{rejectUnauthorized:false}:undefined}); await c.connect();
+const c=new Client({connectionString:process.env.DATABASE_URL}); await c.connect();
 await c.query('BEGIN'); try{
  const b=await c.query(`INSERT INTO boms(bom_no,name,product_item_no,product_name,output_qty,notes) VALUES('BOM-0001','Meja Office A','FG-MEJA-A','Meja Office A',1,'Demo formula') ON CONFLICT(bom_no) DO UPDATE SET name=EXCLUDED.name RETURNING id`); const id=b.rows[0].id;
  await c.query('DELETE FROM bom_materials WHERE bom_id=$1',[id]);

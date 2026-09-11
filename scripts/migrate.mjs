@@ -1,6 +1,6 @@
 import pg from 'pg'; const {Client}=pg;
 if(!process.env.DATABASE_URL) throw new Error('DATABASE_URL belum di-set');
-const c=new Client({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_URL.includes('railway')?{rejectUnauthorized:false}:undefined});
+const c=new Client({connectionString:process.env.DATABASE_URL});
 await c.connect();
 await c.query(`
 CREATE TABLE IF NOT EXISTS accurate_connections(

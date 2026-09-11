@@ -1,11 +1,11 @@
 {
   "name": "bom-jobcosting-aol",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start -p ${PORT:-3000}",
+    "start": "node scripts/start.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "db:seed": "node scripts/seed.mjs"
   },
@@ -23,5 +23,6 @@
     "@types/react-dom": "^19.1.9",
     "typescript": "^5.9.2"
   },
+  "engines": {"node": ">=20 <25"},
   "packageManager": "npm@11.6.0"
 }
