@@ -1,11 +1,2 @@
-import {requireApiPermission} from '@/lib/auth';
-import {query} from '@/lib/db';
-export async function GET(){const auth=await requireApiPermission('accurate.view');if(!auth.ok)return auth.response;
-  const [i,w,a,b]=await Promise.all([
-    query<any>('SELECT COUNT(*)::int c FROM items_cache'),
-    query<any>('SELECT COUNT(*)::int c FROM warehouses_cache'),
-    query<any>('SELECT COUNT(*)::int c FROM accounts_cache'),
-    query<any>('SELECT COUNT(*)::int c FROM branches_cache')
-  ]);
-  return Response.json({items:i.rows[0].c,warehouses:w.rows[0].c,accounts:a.rows[0].c,branches:b.rows[0].c});
-}
+import {requireApiPermission} from '@/lib/auth';import {query} from '@/lib/db';
+export async function GET(){const auth=await requireApiPermission('accurate.view');if(!auth.ok)return auth.response;const org=auth.user.organization_id;const [i,w,a,b,d]=await Promise.all([query<any>('SELECT COUNT(*)::int c FROM items_cache WHERE organization_id=$1',[org]),query<any>('SELECT COUNT(*)::int c FROM warehouses_cache WHERE organization_id=$1',[org]),query<any>('SELECT COUNT(*)::int c FROM accounts_cache WHERE organization_id=$1',[org]),query<any>('SELECT COUNT(*)::int c FROM branches_cache WHERE organization_id=$1',[org]),query<any>('SELECT COUNT(DISTINCT database_id)::int c FROM accurate_connections WHERE organization_id=$1 AND database_id IS NOT NULL',[org])]);return Response.json({items:i.rows[0].c,warehouses:w.rows[0].c,accounts:a.rows[0].c,branches:b.rows[0].c,databases:d.rows[0].c,maxDatabases:auth.user.max_databases||5})}

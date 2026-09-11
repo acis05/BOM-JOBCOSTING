@@ -1,0 +1,2 @@
+import {query} from '@/lib/db';import {createSuperAdminSession,verifyPassword} from '@/lib/auth';
+export async function POST(req:Request){const b=await req.json();const r=await query<any>('SELECT * FROM super_admins WHERE username=$1 AND active=TRUE LIMIT 1',[String(b.username||'').trim()]);const a=r.rows[0];if(!a||!verifyPassword(String(b.password||''),a.password_hash))return Response.json({error:'Username atau password admin salah.'},{status:401});await createSuperAdminSession(Number(a.id));return Response.json({ok:true})}

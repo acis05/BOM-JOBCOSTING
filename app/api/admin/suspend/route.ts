@@ -1,0 +1,1 @@
+import {getSuperAdmin} from '@/lib/auth';import {query} from '@/lib/db';export async function POST(req:Request){const a=await getSuperAdmin();if(!a)return Response.json({error:'Unauthorized'},{status:401});const b=await req.json();await query(`UPDATE organizations SET status='SUSPENDED',updated_at=NOW() WHERE id=$1`,[Number(b.organizationId)]);return Response.json({ok:true})}

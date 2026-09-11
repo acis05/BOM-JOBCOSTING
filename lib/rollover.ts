@@ -1,29 +1,5 @@
 import {query} from '@/lib/db';
 import {accurateFetch,accurateDate} from '@/lib/accurate';
-
+import {getCurrentUser} from '@/lib/auth';
 function errorMessage(j:any,text:string,status:number){const parts:string[]=[];if(Array.isArray(j?.d))parts.push(...j.d.map((x:any)=>typeof x==='string'?x:JSON.stringify(x)));else if(typeof j?.d==='string')parts.push(j.d);if(Array.isArray(j?.errors))parts.push(...j.errors.map((x:any)=>typeof x==='string'?x:(x?.message||JSON.stringify(x))));if(typeof j?.error==='string')parts.push(j.error);if(typeof j?.message==='string')parts.push(j.message);if(!parts.length&&text)parts.push(text.slice(0,700));return parts.filter(Boolean).join('; ')||`Accurate menolak Roll Over (HTTP ${status})`}
-
-export async function pushWorkOrderRollover(workOrderId:number){
- const r=await query<any>('SELECT * FROM work_orders WHERE id=$1',[workOrderId]);const wo=r.rows[0];
- if(!wo)throw new Error('WO tidak ditemukan.');if(!wo.accurate_job_no)throw new Error('Pekerjaan Pesanan Accurate belum terbentuk.');
- if(!wo.product_item_no||Number(wo.planned_qty)<=0)throw new Error('Barang jadi atau qty hasil produksi belum valid.');
- const item=await query<any>('SELECT unit FROM items_cache WHERE item_no=$1 LIMIT 1',[wo.product_item_no]);if(!item.rows.length)throw new Error(`Barang jadi ${wo.product_item_no} belum ditemukan di master Accurate. Sinkronkan master Accurate terlebih dahulu.`);
- const form=new URLSearchParams();const p='data[0]';
- form.set(`${p}.jobOrderNumber`,String(wo.accurate_job_no));
- form.set(`${p}.rollOverType`,'ITEM');
- form.set(`${p}.transDate`,accurateDate(wo.wo_date));
- form.set(`${p}.description`,`${wo.wo_no} - Hasil Jadi ${wo.product_name}`);
- if(wo.branch_id)form.set(`${p}.branchId`,String(wo.branch_id));else if(wo.branch_name)form.set(`${p}.branchName`,String(wo.branch_name));
- form.set(`${p}.detailItem[0].itemNo`,String(wo.product_item_no));
- form.set(`${p}.detailItem[0].quantity`,String(Number(wo.planned_qty)));
- if(item.rows[0]?.unit)form.set(`${p}.detailItem[0].itemUnitName`,String(item.rows[0].unit));
- form.set(`${p}.detailItem[0].portion`,'100');
- if(wo.warehouse_name)form.set(`${p}.detailItem[0].warehouseName`,String(wo.warehouse_name));
- const res=await accurateFetch('/api/roll-over/bulk-save.do',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:form});
- const text=await res.text();let j:any;try{j=JSON.parse(text)}catch{j={raw:text}};
- if(!res.ok||j?.s===false)throw new Error(errorMessage(j,text,res.status));
- const rr=Array.isArray(j?.r)?j.r[0]:j?.r;const rolloverId=String(rr?.id||'');const rolloverNo=String(rr?.number||rr?.no||'');
- await query(`UPDATE work_orders SET status='ROLLED_OVER',accurate_rollover_id=$2,accurate_rollover_no=$3,rollover_error=NULL,sync_error=NULL,updated_at=NOW() WHERE id=$1`,[workOrderId,rolloverId,rolloverNo]);
- await query(`INSERT INTO sync_logs(entity_type,entity_id,action,status,message) VALUES('WORK_ORDER',$1,'PUSH_ROLLOVER','SUCCESS',$2)`,[String(workOrderId),rolloverNo||wo.product_item_no]);
- return {rolloverId,rolloverNo};
-}
+export async function pushWorkOrderRollover(workOrderId:number){const me=await getCurrentUser();if(!me)throw new Error('Silakan login');const r=await query<any>('SELECT * FROM work_orders WHERE id=$1 AND organization_id=$2',[workOrderId,me.organization_id]);const wo=r.rows[0];if(!wo)throw new Error('WO tidak ditemukan.');if(!wo.accurate_job_no)throw new Error('Pekerjaan Pesanan Accurate belum terbentuk.');if(!wo.product_item_no||Number(wo.planned_qty)<=0)throw new Error('Barang jadi atau qty hasil produksi belum valid.');const item=await query<any>('SELECT unit FROM items_cache WHERE organization_id=$1 AND item_no=$2 LIMIT 1',[me.organization_id,wo.product_item_no]);if(!item.rows.length)throw new Error(`Barang jadi ${wo.product_item_no} belum ditemukan di master Accurate. Sinkronkan master Accurate terlebih dahulu.`);const form=new URLSearchParams();const p='data[0]';form.set(`${p}.jobOrderNumber`,String(wo.accurate_job_no));form.set(`${p}.rollOverType`,'ITEM');form.set(`${p}.transDate`,accurateDate(wo.wo_date));form.set(`${p}.description`,`${wo.wo_no} - Hasil Jadi ${wo.product_name}`);if(wo.branch_id)form.set(`${p}.branchId`,String(wo.branch_id));else if(wo.branch_name)form.set(`${p}.branchName`,String(wo.branch_name));form.set(`${p}.detailItem[0].itemNo`,String(wo.product_item_no));form.set(`${p}.detailItem[0].quantity`,String(Number(wo.planned_qty)));if(item.rows[0]?.unit)form.set(`${p}.detailItem[0].itemUnitName`,String(item.rows[0].unit));form.set(`${p}.detailItem[0].portion`,'100');if(wo.warehouse_name)form.set(`${p}.detailItem[0].warehouseName`,String(wo.warehouse_name));const res=await accurateFetch('/api/roll-over/bulk-save.do',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:form});const text=await res.text();let j:any;try{j=JSON.parse(text)}catch{j={raw:text}};if(!res.ok||j?.s===false)throw new Error(errorMessage(j,text,res.status));const rr=Array.isArray(j?.r)?j.r[0]:j?.r;const rolloverId=String(rr?.id||'');const rolloverNo=String(rr?.number||rr?.no||'');await query(`UPDATE work_orders SET status='ROLLED_OVER',accurate_rollover_id=$3,accurate_rollover_no=$4,rollover_error=NULL,sync_error=NULL,updated_at=NOW() WHERE id=$1 AND organization_id=$2`,[workOrderId,me.organization_id,rolloverId,rolloverNo]);await query(`INSERT INTO sync_logs(organization_id,entity_type,entity_id,action,status,message) VALUES($1,'WORK_ORDER',$2,'PUSH_ROLLOVER','SUCCESS',$3)`,[me.organization_id,String(workOrderId),rolloverNo||wo.product_item_no]);return {rolloverId,rolloverNo}}

@@ -1,0 +1,3 @@
+import {getCurrentUser} from '@/lib/auth';import {query} from '@/lib/db';
+const PLANS:any={SIX_MONTHS:{months:6,price:1500000},YEARLY:{months:12,price:2500000}};
+export async function POST(req:Request){const u=await getCurrentUser();if(!u)return Response.json({error:'Silakan login'},{status:401});const b=await req.json();const p=PLANS[String(b.planCode||'')];if(!p)return Response.json({error:'Paket tidak valid'},{status:400});await query(`INSERT INTO activation_requests(organization_id,plan_code,duration_months,price,status,notes) VALUES($1,$2,$3,$4,'PENDING',$5)`,[u.organization_id,b.planCode,p.months,p.price,b.notes||null]);return Response.json({ok:true,message:'Permintaan aktivasi sudah dikirim ke admin.'})}

@@ -4,46 +4,18 @@ import {redirect} from 'next/navigation';
 import {query} from '@/lib/db';
 import type {PermissionKey} from '@/lib/permissions';
 
-export function hashPassword(password:string,salt=crypto.randomBytes(16).toString('hex')){
-  const hash=crypto.scryptSync(password,salt,64).toString('hex');
-  return `${salt}:${hash}`;
-}
-export function verifyPassword(password:string,stored:string){
-  const [salt,hash]=String(stored||'').split(':'); if(!salt||!hash)return false;
-  const test=crypto.scryptSync(password,salt,64); const expected=Buffer.from(hash,'hex');
-  return expected.length===test.length&&crypto.timingSafeEqual(expected,test);
-}
+export function hashPassword(password:string,salt=crypto.randomBytes(16).toString('hex')){const hash=crypto.scryptSync(password,salt,64).toString('hex');return `${salt}:${hash}`}
+export function verifyPassword(password:string,stored:string){const [salt,hash]=String(stored||'').split(':');if(!salt||!hash)return false;const test=crypto.scryptSync(password,salt,64);const expected=Buffer.from(hash,'hex');return expected.length===test.length&&crypto.timingSafeEqual(expected,test)}
 export function tokenHash(token:string){return crypto.createHash('sha256').update(token).digest('hex')}
+export async function createSession(userId:number){const token=crypto.randomBytes(32).toString('hex');await query(`INSERT INTO app_sessions(token_hash,user_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '30 days')`,[tokenHash(token),userId]);const jar=await cookies();jar.set('bom_session',token,{httpOnly:true,sameSite:'lax',secure:process.env.NODE_ENV==='production',path:'/',maxAge:60*60*24*30})}
+export async function destroySession(){const jar=await cookies();const token=jar.get('bom_session')?.value;if(token)await query('DELETE FROM app_sessions WHERE token_hash=$1',[tokenHash(token)]).catch(()=>{});jar.delete('bom_session')}
+export async function getCurrentUser(){const jar=await cookies();const token=jar.get('bom_session')?.value;if(!token)return null;const r=await query<any>(`SELECT u.id,u.username,u.display_name,u.active,u.organization_id,o.name organization_name,o.status organization_status,o.trial_ends_at,o.subscription_ends_at,o.plan_code,o.max_users,o.max_databases FROM app_sessions s JOIN app_users u ON u.id=s.user_id LEFT JOIN organizations o ON o.id=u.organization_id WHERE s.token_hash=$1 AND s.expires_at>NOW() AND u.active=TRUE LIMIT 1`,[tokenHash(token)]);const u=r.rows[0];if(!u)return null;const p=await query<any>(`SELECT DISTINCT rp.permission_key FROM app_user_roles ur JOIN app_role_permissions rp ON rp.role_id=ur.role_id WHERE ur.user_id=$1`,[u.id]);return {...u,permissions:p.rows.map((x:any)=>String(x.permission_key)) as string[]}}
+export function subscriptionActive(u:any){if(!u)return false;if(u.organization_status==='SUSPENDED'||u.organization_status==='EXPIRED')return false;if(u.organization_status==='TRIAL')return !!u.trial_ends_at&&new Date(u.trial_ends_at).getTime()>Date.now();if(u.organization_status==='ACTIVE')return !u.subscription_ends_at||new Date(u.subscription_ends_at).getTime()>Date.now();return false}
+export async function requirePagePermission(permission:PermissionKey){const u=await getCurrentUser();if(!u)redirect('/login');if(!subscriptionActive(u))redirect('/subscription');if(!u.permissions.includes(permission))redirect('/forbidden');return u}
+export async function requireAnyApiPermission(permissions:PermissionKey[]){const u=await getCurrentUser();if(!u)return {ok:false as const,response:Response.json({error:'Silakan login terlebih dahulu.'},{status:401})};if(!subscriptionActive(u))return {ok:false as const,response:Response.json({error:'Masa trial/aktivasi sudah berakhir. Silakan aktivasi paket.'},{status:402})};if(!permissions.some(p=>u.permissions.includes(p)))return {ok:false as const,response:Response.json({error:'Anda tidak memiliki hak akses untuk fitur ini.'},{status:403})};return {ok:true as const,user:u}}
+export async function requireApiPermission(permission:PermissionKey){return requireAnyApiPermission([permission])}
 
-export async function createSession(userId:number){
-  const token=crypto.randomBytes(32).toString('hex'); const h=tokenHash(token);
-  await query(`INSERT INTO app_sessions(token_hash,user_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '30 days')`,[h,userId]);
-  const jar=await cookies(); jar.set('bom_session',token,{httpOnly:true,sameSite:'lax',secure:process.env.NODE_ENV==='production',path:'/',maxAge:60*60*24*30});
-}
-export async function destroySession(){
-  const jar=await cookies(); const token=jar.get('bom_session')?.value;
-  if(token) await query('DELETE FROM app_sessions WHERE token_hash=$1',[tokenHash(token)]).catch(()=>{});
-  jar.delete('bom_session');
-}
-export async function getCurrentUser(){
-  const jar=await cookies(); const token=jar.get('bom_session')?.value; if(!token)return null;
-  const r=await query<any>(`SELECT u.id,u.username,u.display_name,u.active FROM app_sessions s JOIN app_users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>NOW() AND u.active=TRUE LIMIT 1`,[tokenHash(token)]);
-  const u=r.rows[0]; if(!u)return null;
-  const p=await query<any>(`SELECT DISTINCT rp.permission_key FROM app_user_roles ur JOIN app_role_permissions rp ON rp.role_id=ur.role_id WHERE ur.user_id=$1`,[u.id]);
-  return {...u,permissions:p.rows.map((x:any)=>String(x.permission_key)) as string[]};
-}
-export async function requirePagePermission(permission:PermissionKey){
-  const u=await getCurrentUser(); if(!u)redirect('/login'); if(!u.permissions.includes(permission))redirect('/forbidden'); return u;
-}
-
-export async function requireAnyApiPermission(permissions:PermissionKey[]){
-  const u=await getCurrentUser();if(!u)return {ok:false as const,response:Response.json({error:'Silakan login terlebih dahulu.'},{status:401})};
-  if(!permissions.some(p=>u.permissions.includes(p)))return {ok:false as const,response:Response.json({error:'Anda tidak memiliki hak akses untuk fitur ini.'},{status:403})};
-  return {ok:true as const,user:u};
-}
-
-export async function requireApiPermission(permission:PermissionKey){
-  const u=await getCurrentUser(); if(!u)return {ok:false as const,response:Response.json({error:'Silakan login terlebih dahulu.'},{status:401})};
-  if(!u.permissions.includes(permission))return {ok:false as const,response:Response.json({error:'Anda tidak memiliki hak akses untuk fitur ini.'},{status:403})};
-  return {ok:true as const,user:u};
-}
+export async function createSuperAdminSession(adminId:number){const token=crypto.randomBytes(32).toString('hex');await query(`INSERT INTO super_admin_sessions(token_hash,admin_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '7 days')`,[tokenHash(token),adminId]);const jar=await cookies();jar.set('bom_superadmin',token,{httpOnly:true,sameSite:'lax',secure:process.env.NODE_ENV==='production',path:'/',maxAge:60*60*24*7})}
+export async function destroySuperAdminSession(){const jar=await cookies();const token=jar.get('bom_superadmin')?.value;if(token)await query('DELETE FROM super_admin_sessions WHERE token_hash=$1',[tokenHash(token)]).catch(()=>{});jar.delete('bom_superadmin')}
+export async function getSuperAdmin(){const jar=await cookies();const token=jar.get('bom_superadmin')?.value;if(!token)return null;const r=await query<any>(`SELECT a.id,a.username,a.display_name FROM super_admin_sessions s JOIN super_admins a ON a.id=s.admin_id WHERE s.token_hash=$1 AND s.expires_at>NOW() AND a.active=TRUE LIMIT 1`,[tokenHash(token)]);return r.rows[0]||null}
+export async function requireSuperAdmin(){const a=await getSuperAdmin();if(!a)redirect('/admin/login');return a}

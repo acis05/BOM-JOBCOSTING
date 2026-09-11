@@ -3,16 +3,16 @@ import {query} from '@/lib/db';
 import Header from '@/components/Header';
 export const dynamic='force-dynamic';
 
-export default async function Page(){await requirePagePermission('dashboard.view');
+export default async function Page(){const user=await requirePagePermission('dashboard.view');const org=user.organization_id;
   let dbOk=true; let error='';
   let bomCount='0', draftCount='0', submittedCount='0', approvedCount='0'; let rows:any[]=[];
   try{
     const [b,d,s,a,r]=await Promise.all([
-      query<any>(`SELECT COUNT(*) c FROM boms WHERE status='ACTIVE'`),
-      query<any>(`SELECT COUNT(*) c FROM work_orders WHERE status='DRAFT'`),
-      query<any>(`SELECT COUNT(*) c FROM work_orders WHERE status='SUBMITTED'`),
-      query<any>(`SELECT COUNT(*) c FROM work_orders WHERE status IN ('APPROVED','SYNCED','ROLLED_OVER','ROLLOVER_ERROR')`),
-      query<any>(`SELECT * FROM work_orders ORDER BY created_at DESC LIMIT 8`)
+      query<any>(`SELECT COUNT(*) c FROM boms WHERE status='ACTIVE' AND organization_id=$1`,[org]),
+      query<any>(`SELECT COUNT(*) c FROM work_orders WHERE status='DRAFT' AND organization_id=$1`,[org]),
+      query<any>(`SELECT COUNT(*) c FROM work_orders WHERE status='SUBMITTED' AND organization_id=$1`,[org]),
+      query<any>(`SELECT COUNT(*) c FROM work_orders WHERE status IN ('APPROVED','SYNCED','ROLLED_OVER','ROLLOVER_ERROR') AND organization_id=$1`,[org]),
+      query<any>(`SELECT * FROM work_orders WHERE organization_id=$1 ORDER BY created_at DESC LIMIT 8`,[org])
     ]);
     bomCount=b.rows[0].c; draftCount=d.rows[0].c; submittedCount=s.rows[0].c; approvedCount=a.rows[0].c; rows=r.rows;
   }catch(e:any){dbOk=false;error=e?.message||'Database belum siap';}
