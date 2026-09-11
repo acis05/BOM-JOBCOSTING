@@ -177,6 +177,7 @@ CREATE TABLE IF NOT EXISTS boms(
  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE boms ADD COLUMN IF NOT EXISTS organization_id BIGINT REFERENCES organizations(id);
+ALTER TABLE boms ADD COLUMN IF NOT EXISTS product_unit TEXT;
 CREATE INDEX IF NOT EXISTS idx_boms_org ON boms(organization_id);
 
 CREATE TABLE IF NOT EXISTS bom_materials(
