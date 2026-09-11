@@ -1,6 +1,7 @@
+import {requireApiPermission} from '@/lib/auth';
 import {query} from '@/lib/db';
 
-export async function POST(){
+export async function POST(){const auth=await requireApiPermission('accurate.connect');if(!auth.ok)return auth.response;
   await query('DELETE FROM accurate_connections');
   await Promise.all([
     query('DELETE FROM items_cache'),

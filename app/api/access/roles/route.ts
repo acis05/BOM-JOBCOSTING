@@ -1,0 +1,2 @@
+import {query} from '@/lib/db';import {requireApiPermission} from '@/lib/auth';
+export async function POST(req:Request){const a=await requireApiPermission('access.manage');if(!a.ok)return a.response;const b=await req.json();const name=String(b.name||'').trim();if(!name)return Response.json({error:'Nama role wajib.'},{status:400});try{const r=await query<any>('INSERT INTO app_roles(name) VALUES($1) RETURNING *',[name]);return Response.json(r.rows[0])}catch(e:any){return Response.json({error:e.message},{status:400})}}

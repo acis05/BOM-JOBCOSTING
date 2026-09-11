@@ -1,7 +1,8 @@
+import {requireApiPermission} from '@/lib/auth';
 import ExcelJS from 'exceljs';import {pool} from '@/lib/db';
 const norm=(v:any)=>String(v??'').trim();
 function cellValue(row:ExcelJS.Row, map:Record<string,number>, name:string){return row.getCell(map[name]||0).value}
-export async function POST(req:Request){
+export async function POST(req:Request){const auth=await requireApiPermission('bom.import');if(!auth.ok)return auth.response;
   const fd=await req.formData();const file=fd.get('file');if(!(file instanceof File))return Response.json({error:'Pilih file Excel terlebih dahulu.'},{status:400});
   const wb=new ExcelJS.Workbook();await wb.xlsx.load(Buffer.from(await file.arrayBuffer()) as any);const ws=wb.worksheets[0];if(!ws)return Response.json({error:'Sheet Excel tidak ditemukan.'},{status:400});
   const headers:Record<string,number>={};ws.getRow(1).eachCell((c,col)=>headers[norm(c.value).toLowerCase()]=col);

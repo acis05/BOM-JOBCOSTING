@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 
 const port = process.env.PORT || '3000';
-console.log(`[BOM-JOBCOSTING] v0.2.3 booting`);
+console.log(`[BOM-JOBCOSTING] v0.2.9 booting`);
 console.log(`[BOM-JOBCOSTING] PORT=${port}`);
 console.log(`[BOM-JOBCOSTING] DATABASE_URL=${process.env.DATABASE_URL ? 'configured' : 'NOT configured'}`);
 console.log(`[BOM-JOBCOSTING] APP_URL=${process.env.APP_URL || '(not set)'}`);

@@ -1,0 +1,2 @@
+import {query} from '@/lib/db';import {createSession,verifyPassword} from '@/lib/auth';
+export async function POST(req:Request){const b=await req.json();const r=await query<any>('SELECT * FROM app_users WHERE username=$1 AND active=TRUE LIMIT 1',[String(b.username||'').trim()]);const u=r.rows[0];if(!u||!verifyPassword(String(b.password||''),u.password_hash))return Response.json({error:'Username atau password salah.'},{status:401});await createSession(Number(u.id));return Response.json({ok:true})}

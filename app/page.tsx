@@ -1,8 +1,9 @@
+import {requirePagePermission} from '@/lib/auth';
 import {query} from '@/lib/db';
 import Header from '@/components/Header';
 export const dynamic='force-dynamic';
 
-export default async function Page(){
+export default async function Page(){await requirePagePermission('dashboard.view');
   let dbOk=true; let error='';
   let bomCount='0', draftCount='0', submittedCount='0', approvedCount='0'; let rows:any[]=[];
   try{
@@ -10,7 +11,7 @@ export default async function Page(){
       query<any>(`SELECT COUNT(*) c FROM boms WHERE status='ACTIVE'`),
       query<any>(`SELECT COUNT(*) c FROM work_orders WHERE status='DRAFT'`),
       query<any>(`SELECT COUNT(*) c FROM work_orders WHERE status='SUBMITTED'`),
-      query<any>(`SELECT COUNT(*) c FROM work_orders WHERE status IN ('APPROVED','SYNCED')`),
+      query<any>(`SELECT COUNT(*) c FROM work_orders WHERE status IN ('APPROVED','SYNCED','ROLLED_OVER','ROLLOVER_ERROR')`),
       query<any>(`SELECT * FROM work_orders ORDER BY created_at DESC LIMIT 8`)
     ]);
     bomCount=b.rows[0].c; draftCount=d.rows[0].c; submittedCount=s.rows[0].c; approvedCount=a.rows[0].c; rows=r.rows;

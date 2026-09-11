@@ -134,3 +134,37 @@ git push
 ```
 
 Railway akan redeploy dari GitHub.
+
+## v0.2.9 - Login & Hak Akses
+
+Tambahkan environment variable Railway (disarankan):
+
+```text
+APP_ADMIN_USERNAME=admin
+APP_ADMIN_PASSWORD=GANTI_PASSWORD_KUAT
+```
+
+Jika variable tersebut belum diisi saat user pertama dibuat, default awal adalah `admin` / `admin123`. Segera ganti password melalui menu **Hak Akses**.
+
+Hak akses tersedia per fitur: BOM, WO, Approval, Accurate Connection/Sync, Push Job, Roll Over, dan pengelolaan user/role.
+
+## v0.2.9 - Roll Over Produk Jadi, Hapus, Hak Akses
+
+- Tombol **Kirim Job + Hasil Jadi** membuat Pekerjaan Pesanan dan langsung mencoba Roll Over tipe ITEM untuk produk jadi pada WO.
+- Jika Job Order sukses tetapi Roll Over gagal, status menjadi `ROLLOVER_ERROR`; gunakan **Retry Hasil Jadi** tanpa membuat Job Order baru.
+- Daftar BOM dan WO memiliki tombol **Hapus** sesuai permission. Menghapus WO lokal tidak menghapus transaksi yang sudah ada di Accurate.
+- Menu **Hak Akses** menyediakan User, Role, dan permission per fitur termasuk Approval.
+
+Login pertama setelah upgrade:
+
+```text
+Username: admin
+Password: admin123
+```
+
+Lebih aman set Railway variables sebelum deployment pertama yang membuat user:
+
+```text
+APP_ADMIN_USERNAME=admin
+APP_ADMIN_PASSWORD=<password-kuat>
+```
