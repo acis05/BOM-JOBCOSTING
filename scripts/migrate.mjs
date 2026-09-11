@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS warehouses_cache(
 CREATE TABLE IF NOT EXISTS accounts_cache(
  id SERIAL PRIMARY KEY, accurate_id BIGINT UNIQUE, account_no TEXT UNIQUE, name TEXT NOT NULL, account_type TEXT, updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS branches_cache(
+ id SERIAL PRIMARY KEY, accurate_id BIGINT UNIQUE, name TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 CREATE TABLE IF NOT EXISTS boms(
  id BIGSERIAL PRIMARY KEY, bom_no TEXT UNIQUE NOT NULL, name TEXT NOT NULL, product_item_no TEXT NOT NULL, product_name TEXT NOT NULL,
  output_qty NUMERIC(18,4) NOT NULL DEFAULT 1, notes TEXT, status TEXT NOT NULL DEFAULT 'ACTIVE', created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -29,7 +32,7 @@ CREATE TABLE IF NOT EXISTS bom_costs(
 CREATE TABLE IF NOT EXISTS work_orders(
  id BIGSERIAL PRIMARY KEY, wo_no TEXT UNIQUE NOT NULL, bom_id BIGINT REFERENCES boms(id), product_item_no TEXT NOT NULL, product_name TEXT NOT NULL,
  planned_qty NUMERIC(18,4) NOT NULL, warehouse_name TEXT, wo_date DATE NOT NULL DEFAULT CURRENT_DATE, notes TEXT,
- status TEXT NOT NULL DEFAULT 'DRAFT', approved_at TIMESTAMPTZ, accurate_job_id TEXT, accurate_job_no TEXT, sync_error TEXT,
+ status TEXT NOT NULL DEFAULT 'DRAFT', branch_id BIGINT, branch_name TEXT, approved_at TIMESTAMPTZ, accurate_job_id TEXT, accurate_job_no TEXT, sync_error TEXT,
  created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE TABLE IF NOT EXISTS work_order_materials(
@@ -45,6 +48,8 @@ CREATE TABLE IF NOT EXISTS sync_logs(
  id BIGSERIAL PRIMARY KEY, entity_type TEXT NOT NULL, entity_id TEXT, action TEXT NOT NULL, status TEXT NOT NULL, message TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE accounts_cache ADD COLUMN IF NOT EXISTS account_type TEXT;
+ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS branch_id BIGINT;
+ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS branch_name TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_cache_no ON accounts_cache(account_no);
 CREATE INDEX IF NOT EXISTS idx_wo_status ON work_orders(status);
 CREATE INDEX IF NOT EXISTS idx_bom_materials_bom ON bom_materials(bom_id);

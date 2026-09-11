@@ -18,7 +18,7 @@ export function oauthAuthorizeUrl(){
   u.searchParams.set('client_id',process.env.ACCURATE_CLIENT_ID||'');
   u.searchParams.set('response_type','code');
   u.searchParams.set('redirect_uri',process.env.ACCURATE_REDIRECT_URI||'');
-  u.searchParams.set('scope',process.env.ACCURATE_SCOPE||'item_view warehouse_view glaccount_view job_order_save roll_over_save');
+  u.searchParams.set('scope',process.env.ACCURATE_SCOPE||'item_view warehouse_view glaccount_view branch_view job_order_save roll_over_save');
   return u.toString();
 }
 

@@ -24,7 +24,7 @@ DATABASE_URL=${{Postgres.DATABASE_URL}}
 ACCURATE_CLIENT_ID=...
 ACCURATE_CLIENT_SECRET=...
 ACCURATE_REDIRECT_URI=https://bomjobcosting.acisapps.id/api/accurate/oauth/callback
-ACCURATE_SCOPE=item_view warehouse_view glaccount_view job_order_save roll_over_save
+ACCURATE_SCOPE=item_view warehouse_view glaccount_view branch_view job_order_save roll_over_save
 ```
 
 Opsional, tapi disarankan:

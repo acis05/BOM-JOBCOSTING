@@ -1,107 +1,22 @@
 import {query} from '@/lib/db';
 import {accurateFetch,getConnection,accurateDate} from '@/lib/accurate';
 
-type WoRow={
-  id:number; wo_no:string; wo_date:string|Date; product_name:string; status:string;
-};
-
-function accurateErrorMessage(j:any,text:string,status:number){
-  const parts:string[]=[];
-  if(Array.isArray(j?.d)) parts.push(...j.d.map((x:any)=>typeof x==='string'?x:JSON.stringify(x)));
-  else if(typeof j?.d==='string') parts.push(j.d);
-  if(Array.isArray(j?.errors)) parts.push(...j.errors.map((x:any)=>typeof x==='string'?x:(x?.message||JSON.stringify(x))));
-  if(typeof j?.error==='string') parts.push(j.error);
-  if(typeof j?.message==='string') parts.push(j.message);
-  if(!parts.length && text) parts.push(text.slice(0,700));
-  return parts.filter(Boolean).join('; ') || `Accurate menolak transaksi (HTTP ${status})`;
-}
-
+type WoRow={id:number;wo_no:string;wo_date:string|Date;product_name:string;status:string;branch_id:number|null;branch_name:string|null};
+function accurateErrorMessage(j:any,text:string,status:number){const parts:string[]=[];if(Array.isArray(j?.d))parts.push(...j.d.map((x:any)=>typeof x==='string'?x:JSON.stringify(x)));else if(typeof j?.d==='string')parts.push(j.d);if(Array.isArray(j?.errors))parts.push(...j.errors.map((x:any)=>typeof x==='string'?x:(x?.message||JSON.stringify(x))));if(typeof j?.error==='string')parts.push(j.error);if(typeof j?.message==='string')parts.push(j.message);if(!parts.length&&text)parts.push(text.slice(0,700));return parts.filter(Boolean).join('; ')||`Accurate menolak transaksi (HTTP ${status})`}
 export async function POST(req:Request){
-  const{workOrderId}=await req.json();
-  const c=await getConnection();
-  if(!c?.session_id) return Response.json({error:'Accurate Online belum terhubung atau database belum dipilih.'},{status:400});
-
-  const w=await query<WoRow>('SELECT * FROM work_orders WHERE id=$1',[workOrderId]);
-  const wo=w.rows[0];
-  if(!wo||!['APPROVED','SYNC_ERROR'].includes(wo.status)) return Response.json({error:'WO harus sudah disetujui.'},{status:400});
-
-  const mats=await query<any>('SELECT * FROM work_order_materials WHERE work_order_id=$1 ORDER BY id',[workOrderId]);
-  const costs=await query<any>('SELECT * FROM work_order_costs WHERE work_order_id=$1 ORDER BY id',[workOrderId]);
-
-  if(!mats.rows.length) return Response.json({error:'WO belum memiliki rincian bahan baku.'},{status:400});
-
-  // Validate material item numbers against synced Accurate master.
-  const missingItems:string[]=[];
-  for(const m of mats.rows){
-    if(!m.item_no || Number(m.qty)<=0){
-      missingItems.push(`${m.item_no||m.item_name||'Material'} (qty tidak valid)`);
-      continue;
-    }
-    const chk=await query<any>('SELECT 1 FROM items_cache WHERE item_no=$1 LIMIT 1',[m.item_no]);
-    if(!chk.rows.length) missingItems.push(String(m.item_no));
-  }
-  if(missingItems.length){
-    const msg=`Bahan baku belum ditemukan pada master Accurate: ${missingItems.join(', ')}. Sinkronkan master Accurate lalu periksa BOM/WO.`;
-    await query(`UPDATE work_orders SET status='SYNC_ERROR',sync_error=$2,updated_at=NOW() WHERE id=$1`,[workOrderId,msg]);
-    return Response.json({error:msg},{status:400});
-  }
-
-  // Only costs with positive amount are sent. If amount exists, account is mandatory and must exist in Accurate cache.
-  const validCosts=costs.rows.filter((k:any)=>Number(k.amount)>0);
-  const invalidAccounts:string[]=[];
-  for(const k of validCosts){
-    if(!k.account_no){ invalidAccounts.push(`${k.cost_name}: akun kosong`); continue; }
-    const chk=await query<any>('SELECT 1 FROM accounts_cache WHERE account_no=$1 LIMIT 1',[k.account_no]);
-    if(!chk.rows.length) invalidAccounts.push(`${k.cost_name}: ${k.account_no}`);
-  }
-  if(invalidAccounts.length){
-    const msg=`Akun biaya belum valid di Accurate: ${invalidAccounts.join(', ')}. Sinkronkan master Accurate lalu pilih akun biaya kembali.`;
-    await query(`UPDATE work_orders SET status='SYNC_ERROR',sync_error=$2,updated_at=NOW() WHERE id=$1`,[workOrderId,msg]);
-    return Response.json({error:msg},{status:400});
-  }
-
-  const form=new URLSearchParams();
-  const p='data[0]';
-  form.set(`${p}.transDate`,accurateDate(wo.wo_date));
-  form.set(`${p}.number`,wo.wo_no);
-  form.set(`${p}.description`,`${wo.wo_no} - ${wo.product_name}`);
-
-  mats.rows.forEach((m:any,i:number)=>{
-    form.set(`${p}.detailItem[${i}].itemNo`,String(m.item_no));
-    form.set(`${p}.detailItem[${i}].quantity`,String(Number(m.qty)));
-    if(m.unit) form.set(`${p}.detailItem[${i}].itemUnitName`,String(m.unit));
-  });
-
-  validCosts.forEach((k:any,i:number)=>{
-    form.set(`${p}.detailExpense[${i}].accountNo`,String(k.account_no));
-    form.set(`${p}.detailExpense[${i}].expenseAmount`,String(Number(k.amount)));
-    form.set(`${p}.detailExpense[${i}].expenseName`,String(k.cost_name||'Biaya Produksi'));
-  });
-
-  try{
-    const res=await accurateFetch('/api/job-order/bulk-save.do',{
-      method:'POST',
-      headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
-      body:form
-    });
-    const text=await res.text();
-    let j:any;
-    try{j=JSON.parse(text)}catch{j={raw:text}};
-
-    if(!res.ok || j?.s===false){
-      throw new Error(accurateErrorMessage(j,text,res.status));
-    }
-
-    const rr=Array.isArray(j?.r)?j.r[0]:j?.r;
-    const jobId=String(rr?.id||'');
-    const jobNo=String(rr?.number||rr?.no||wo.wo_no);
-    await query(`UPDATE work_orders SET status='SYNCED',accurate_job_id=$2,accurate_job_no=$3,sync_error=NULL,updated_at=NOW() WHERE id=$1`,[workOrderId,jobId,jobNo]);
-    await query(`INSERT INTO sync_logs(entity_type,entity_id,action,status,message) VALUES('WORK_ORDER',$1,'PUSH_JOB','SUCCESS',$2)`,[String(workOrderId),jobNo]);
-    return Response.json({ok:true,jobId,jobNo});
-  }catch(e:any){
-    const msg=e?.message||'Gagal mengirim Work Order ke Accurate.';
-    await query(`UPDATE work_orders SET status='SYNC_ERROR',sync_error=$2,updated_at=NOW() WHERE id=$1`,[workOrderId,msg]);
-    await query(`INSERT INTO sync_logs(entity_type,entity_id,action,status,message) VALUES('WORK_ORDER',$1,'PUSH_JOB','ERROR',$2)`,[String(workOrderId),msg.slice(0,1500)]).catch(()=>{});
-    return Response.json({error:msg},{status:400});
-  }
+ const{workOrderId}=await req.json();const c=await getConnection();if(!c?.session_id)return Response.json({error:'Accurate Online belum terhubung atau database belum dipilih.'},{status:400});
+ const w=await query<WoRow>('SELECT * FROM work_orders WHERE id=$1',[workOrderId]);const wo=w.rows[0];if(!wo||!['APPROVED','SYNC_ERROR'].includes(wo.status))return Response.json({error:'WO harus sudah disetujui.'},{status:400});
+ const mats=await query<any>('SELECT * FROM work_order_materials WHERE work_order_id=$1 ORDER BY id',[workOrderId]);const costs=await query<any>('SELECT * FROM work_order_costs WHERE work_order_id=$1 ORDER BY id',[workOrderId]);if(!mats.rows.length)return Response.json({error:'WO belum memiliki rincian bahan baku.'},{status:400});
+ const branches=await query<any>('SELECT accurate_id,name FROM branches_cache ORDER BY name');let branchId=wo.branch_id;let branchName=wo.branch_name;
+ if(!branchId&&branches.rows.length===1){branchId=Number(branches.rows[0].accurate_id);branchName=branches.rows[0].name}
+ if(!branchId&&branches.rows.length>1){const msg='Database Accurate memiliki lebih dari satu cabang. Edit WO lalu pilih Cabang Accurate sebelum dikirim.';await query(`UPDATE work_orders SET status='SYNC_ERROR',sync_error=$2,updated_at=NOW() WHERE id=$1`,[workOrderId,msg]);return Response.json({error:msg},{status:400})}
+ const missingItems:string[]=[];for(const m of mats.rows){if(!m.item_no||Number(m.qty)<=0){missingItems.push(`${m.item_no||m.item_name||'Material'} (qty tidak valid)`);continue}const chk=await query<any>('SELECT 1 FROM items_cache WHERE item_no=$1 LIMIT 1',[m.item_no]);if(!chk.rows.length)missingItems.push(String(m.item_no))}
+ if(missingItems.length){const msg=`Bahan baku belum ditemukan pada master Accurate: ${missingItems.join(', ')}. Sinkronkan master Accurate lalu periksa BOM/WO.`;await query(`UPDATE work_orders SET status='SYNC_ERROR',sync_error=$2,updated_at=NOW() WHERE id=$1`,[workOrderId,msg]);return Response.json({error:msg},{status:400})}
+ const validCosts=costs.rows.filter((k:any)=>Number(k.amount)>0);const invalidAccounts:string[]=[];for(const k of validCosts){if(!k.account_no){invalidAccounts.push(`${k.cost_name}: akun kosong`);continue}const chk=await query<any>('SELECT 1 FROM accounts_cache WHERE account_no=$1 LIMIT 1',[k.account_no]);if(!chk.rows.length)invalidAccounts.push(`${k.cost_name}: ${k.account_no}`)}
+ if(invalidAccounts.length){const msg=`Akun biaya belum valid di Accurate: ${invalidAccounts.join(', ')}. Sinkronkan master Accurate lalu pilih akun biaya kembali.`;await query(`UPDATE work_orders SET status='SYNC_ERROR',sync_error=$2,updated_at=NOW() WHERE id=$1`,[workOrderId,msg]);return Response.json({error:msg},{status:400})}
+ const form=new URLSearchParams();const p='data[0]';form.set(`${p}.transDate`,accurateDate(wo.wo_date));form.set(`${p}.number`,wo.wo_no);form.set(`${p}.description`,`${wo.wo_no} - ${wo.product_name}`);if(branchId)form.set(`${p}.branchId`,String(branchId));else if(branchName)form.set(`${p}.branchName`,String(branchName));
+ mats.rows.forEach((m:any,i:number)=>{form.set(`${p}.detailItem[${i}].itemNo`,String(m.item_no));form.set(`${p}.detailItem[${i}].quantity`,String(Number(m.qty)));if(m.unit)form.set(`${p}.detailItem[${i}].itemUnitName`,String(m.unit))});
+ validCosts.forEach((k:any,i:number)=>{form.set(`${p}.detailExpense[${i}].accountNo`,String(k.account_no));form.set(`${p}.detailExpense[${i}].expenseAmount`,String(Number(k.amount)));form.set(`${p}.detailExpense[${i}].expenseName`,String(k.cost_name||'Biaya Produksi'))});
+ try{const res=await accurateFetch('/api/job-order/bulk-save.do',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:form});const text=await res.text();let j:any;try{j=JSON.parse(text)}catch{j={raw:text}};if(!res.ok||j?.s===false)throw new Error(accurateErrorMessage(j,text,res.status));const rr=Array.isArray(j?.r)?j.r[0]:j?.r;const jobId=String(rr?.id||'');const jobNo=String(rr?.number||rr?.no||wo.wo_no);await query(`UPDATE work_orders SET status='SYNCED',accurate_job_id=$2,accurate_job_no=$3,sync_error=NULL,branch_id=COALESCE(branch_id,$4),branch_name=COALESCE(branch_name,$5),updated_at=NOW() WHERE id=$1`,[workOrderId,jobId,jobNo,branchId||null,branchName||null]);await query(`INSERT INTO sync_logs(entity_type,entity_id,action,status,message) VALUES('WORK_ORDER',$1,'PUSH_JOB','SUCCESS',$2)`,[String(workOrderId),jobNo]);return Response.json({ok:true,jobId,jobNo})}
+ catch(e:any){const msg=e?.message||'Gagal mengirim Work Order ke Accurate.';await query(`UPDATE work_orders SET status='SYNC_ERROR',sync_error=$2,updated_at=NOW() WHERE id=$1`,[workOrderId,msg]);await query(`INSERT INTO sync_logs(entity_type,entity_id,action,status,message) VALUES('WORK_ORDER',$1,'PUSH_JOB','ERROR',$2)`,[String(workOrderId),msg.slice(0,1500)]).catch(()=>{});return Response.json({error:msg},{status:400})}
 }
