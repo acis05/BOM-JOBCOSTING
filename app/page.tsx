@@ -11,7 +11,7 @@ export default async function Page(){const user=await requirePagePermission('das
       query<any>(`SELECT COUNT(*) c FROM boms WHERE status='ACTIVE' AND organization_id=$1`,[org]),
       query<any>(`SELECT COUNT(*) c FROM work_orders WHERE status='DRAFT' AND organization_id=$1`,[org]),
       query<any>(`SELECT COUNT(*) c FROM work_orders WHERE status='SUBMITTED' AND organization_id=$1`,[org]),
-      query<any>(`SELECT COUNT(*) c FROM work_orders WHERE status IN ('APPROVED','SYNCED','ROLLED_OVER','ROLLOVER_ERROR') AND organization_id=$1`,[org]),
+      query<any>(`SELECT COUNT(*) c FROM work_orders WHERE status IN ('APPROVED','SYNCED','ROLLED_OVER','ROLLOVER_ERROR','ROLLOVER_VERIFY') AND organization_id=$1`,[org]),
       query<any>(`SELECT * FROM work_orders WHERE organization_id=$1 ORDER BY created_at DESC LIMIT 8`,[org])
     ]);
     bomCount=b.rows[0].c; draftCount=d.rows[0].c; submittedCount=s.rows[0].c; approvedCount=a.rows[0].c; rows=r.rows;
