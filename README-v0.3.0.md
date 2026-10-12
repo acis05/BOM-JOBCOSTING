@@ -3,8 +3,8 @@
 Tambahan SaaS / aktivasi manual:
 
 - Trial gratis 3 hari melalui `/register`
-- Paket 6 bulan Rp 1.500.000
-- Paket 1 tahun Rp 2.500.000
+- Paket 6 bulan Rp 3.000.000
+- Paket 1 tahun Rp 5.000.000
 - Maksimal 5 user aktif per perusahaan
 - Maksimal 5 database Accurate per perusahaan
 - Request aktivasi manual tanpa payment gateway
@@ -38,7 +38,7 @@ SUPER_ADMIN_PASSWORD=GANTI_PASSWORD_KUAT
 ## Harga
 
 - Trial: 3 hari
-- 6 bulan: Rp 1.500.000
-- 1 tahun: Rp 2.500.000
+- 6 bulan: Rp 3.000.000
+- 1 tahun: Rp 5.000.000
 - Maks. 5 user
 - Maks. 5 database Accurate
