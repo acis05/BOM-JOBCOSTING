@@ -10,13 +10,19 @@ type BranchOption={accurate_id:number|string;name:string};
 type AccountOption={account_no:string;name:string};
 const formatMoney=(v:string|number)=>{const n=Number(String(v??'').replace(/\D/g,''));return Number.isFinite(n)&&n?new Intl.NumberFormat('id-ID').format(n):''};
 const rawMoney=(v:string)=>v.replace(/\D/g,'');
+function htmlDateValue(v:any){
+ if(!v)return new Date().toISOString().slice(0,10);
+ if(typeof v==='string'){const m=v.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return `${m[1]}-${m[2]}-${m[3]}`;}
+ const d=v instanceof Date?v:new Date(v);if(Number.isNaN(d.getTime()))return new Date().toISOString().slice(0,10);
+ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 
 type WoState={woNo:string;bomId:string;plannedQty:string;warehouseName:string;branchId:string;woDate:string;notes:string};
 
 export default function WoForm({boms,warehouses=[],branches=[],accounts=[],initial,id}:{boms:BomOption[];warehouses?:WarehouseOption[];branches?:BranchOption[];accounts?:AccountOption[];initial?:any;id?:string}){
  const r=useRouter();
  const defaultBranch=String(initial?.branch_id||branches[0]?.accurate_id||'');
- const[b,setB]=useState<WoState>({woNo:initial?.wo_no||'',bomId:String(initial?.bom_id||boms[0]?.id||''),plannedQty:String(initial?.planned_qty||1),warehouseName:initial?.warehouse_name||warehouses[0]?.name||'',branchId:defaultBranch,woDate:initial?String(initial.wo_date).slice(0,10):new Date().toISOString().slice(0,10),notes:initial?.notes||''});
+ const[b,setB]=useState<WoState>({woNo:initial?.wo_no||'',bomId:String(initial?.bom_id||boms[0]?.id||''),plannedQty:String(initial?.planned_qty||1),warehouseName:initial?.warehouse_name||warehouses[0]?.name||'',branchId:defaultBranch,woDate:htmlDateValue(initial?.wo_date),notes:initial?.notes||''});
  const[materials,setMaterials]=useState<MaterialLine[]>((initial?.materials||[]).map((m:any)=>({itemNo:m.item_no,itemName:m.item_name,qty:String(m.qty),unit:m.unit||''})));
  const[costs,setCosts]=useState<CostLine[]>((initial?.costs||[]).map((k:any)=>({costName:k.cost_name,accountNo:k.account_no||'',amount:String(k.amount)})));
  const[formulaInfo,setFormulaInfo]=useState<{outputQty:number;productItemNo:string;productName:string}|null>(initial?{outputQty:Number(initial.output_qty||1),productItemNo:initial.product_item_no||'',productName:initial.product_name||''}:null);
