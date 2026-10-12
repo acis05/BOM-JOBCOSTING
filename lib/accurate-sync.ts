@@ -28,20 +28,20 @@ export async function syncAccurateMasters(kinds:Kind[]=['items','warehouses','ac
 if(kinds.includes('warehouses')){const rows=await fetchAll('/api/warehouse/list.do','id,name');await c.query('BEGIN');await c.query('DELETE FROM warehouses_cache WHERE organization_id=$1',[org]);for(const x of rows){if(!x?.name)continue;await c.query(`INSERT INTO warehouses_cache(organization_id,accurate_id,name,updated_at) VALUES($1,$2,$3,NOW()) ON CONFLICT(organization_id,accurate_id) DO UPDATE SET name=EXCLUDED.name,updated_at=NOW()`,[org,x.id||null,x.name])}await c.query('COMMIT');result.warehouses=rows.length}
 if(kinds.includes('accounts')){const rows=await fetchAll('/api/glaccount/list.do','id,no,name,accountType,suspended');await c.query('BEGIN');await c.query('DELETE FROM accounts_cache WHERE organization_id=$1',[org]);for(const x of rows){if(!x?.no)continue;await c.query(`INSERT INTO accounts_cache(organization_id,accurate_id,account_no,name,account_type,updated_at) VALUES($1,$2,$3,$4,$5,NOW()) ON CONFLICT(organization_id,account_no) DO UPDATE SET accurate_id=EXCLUDED.accurate_id,name=EXCLUDED.name,account_type=EXCLUDED.account_type,updated_at=NOW()`,[org,x.id||null,x.no,x.name||x.no,x.accountType||null])}await c.query('COMMIT');result.accounts=rows.length}
 if(kinds.includes('branches')){
-  let rows:any[]=[];
   try{
-    rows=await fetchAll('/api/branch/list.do','id,name');
+    const rows=await fetchAll('/api/branch/list.do','id,name');
+    const unique=new Map<string,any>();
+    for(const x of rows){if(!x?.name)continue;const key=String(x.id??x.name);if(!unique.has(key))unique.set(key,x)}
+    const branches=[...unique.values()];
+    await c.query('BEGIN');
+    await c.query('DELETE FROM branches_cache WHERE organization_id=$1',[org]);
+    for(const x of branches){await c.query(`INSERT INTO branches_cache(organization_id,accurate_id,name,updated_at) VALUES($1,$2,$3,NOW()) ON CONFLICT(organization_id,accurate_id) DO UPDATE SET name=EXCLUDED.name,updated_at=NOW()`,[org,x.id||null,x.name])}
+    await c.query('COMMIT');
+    result.branches=branches.length;
   }catch(e:any){
-    const msg=String(e?.message||e||'');
-    if(/scope|forbidden|403|unauthor/i.test(msg))throw new Error('Cabang Accurate tidak dapat dibaca. Pastikan ACCURATE_SCOPE memuat branch_view, lalu Putuskan Accurate dan Connect Accurate kembali agar scope baru diberikan.');
-    throw new Error(`Gagal membaca Cabang Accurate: ${msg}`);
+    // Cabang bersifat opsional untuk proses sinkron master. Jangan gagalkan item/gudang/akun.
+    // Jika database multi-cabang dan daftar cabang tidak bisa dibaca, user dapat mengisi branchName manual di WO.
+    result.branches=0;
+    result.branchWarning=String(e?.message||e||'Daftar cabang belum dapat dibaca');
   }
-  const unique=new Map<string,any>();
-  for(const x of rows){if(!x?.name)continue;const key=String(x.id??x.name);if(!unique.has(key))unique.set(key,x)}
-  const branches=[...unique.values()];
-  await c.query('BEGIN');
-  await c.query('DELETE FROM branches_cache WHERE organization_id=$1',[org]);
-  for(const x of branches){await c.query(`INSERT INTO branches_cache(organization_id,accurate_id,name,updated_at) VALUES($1,$2,$3,NOW()) ON CONFLICT(organization_id,accurate_id) DO UPDATE SET name=EXCLUDED.name,updated_at=NOW()`,[org,x.id||null,x.name])}
-  await c.query('COMMIT');
-  result.branches=branches.length
 }return result}catch(e){try{await c.query('ROLLBACK')}catch{}throw e}finally{c.release()}}
