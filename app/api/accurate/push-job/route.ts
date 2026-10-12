@@ -1,5 +1,6 @@
 import {requireApiPermission} from '@/lib/auth';
 import {pushWorkOrderRollover} from '@/lib/rollover';
+import {syncAccurateMasters} from '@/lib/accurate-sync';
 import {query} from '@/lib/db';
 import {accurateFetch,getConnection,accurateDate} from '@/lib/accurate';
 
@@ -10,9 +11,15 @@ export async function POST(req:Request){
  const{workOrderId}=await req.json();const c=await getConnection();if(!c?.session_id)return Response.json({error:'Accurate Online belum terhubung atau database belum dipilih.'},{status:400});
  const w=await query<WoRow>('SELECT * FROM work_orders WHERE id=$1 AND organization_id=$2',[workOrderId,auth.user.organization_id]);const wo=w.rows[0];if(!wo||!['APPROVED','SYNC_ERROR'].includes(wo.status))return Response.json({error:'WO harus sudah disetujui.'},{status:400});
  const mats=await query<any>('SELECT * FROM work_order_materials WHERE work_order_id=$1 ORDER BY id',[workOrderId]);const costs=await query<any>('SELECT * FROM work_order_costs WHERE work_order_id=$1 ORDER BY id',[workOrderId]);if(!mats.rows.length)return Response.json({error:'WO belum memiliki rincian bahan baku.'},{status:400});
- const branches=await query<any>('SELECT accurate_id,name FROM branches_cache WHERE organization_id=$1 ORDER BY name',[auth.user.organization_id]);let branchId=wo.branch_id;let branchName=wo.branch_name;
+ let branches=await query<any>('SELECT accurate_id,name FROM branches_cache WHERE organization_id=$1 ORDER BY name',[auth.user.organization_id]);let branchId=wo.branch_id;let branchName=wo.branch_name;
+ // Cache cabang bisa kosong pada database lama / setelah pergantian scope. Coba sinkron otomatis sebelum mengirim transaksi.
+ if(!branchId&&branches.rows.length===0){
+   try{await syncAccurateMasters(['branches']);branches=await query<any>('SELECT accurate_id,name FROM branches_cache WHERE organization_id=$1 ORDER BY name',[auth.user.organization_id])}
+   catch(e:any){const msg=String(e?.message||e||'Cabang Accurate belum dapat disinkronkan.');await query(`UPDATE work_orders SET status='SYNC_ERROR',sync_error=$2,updated_at=NOW() WHERE id=$1`,[workOrderId,msg]);return Response.json({error:msg},{status:400})}
+ }
  if(!branchId&&branches.rows.length===1){branchId=Number(branches.rows[0].accurate_id);branchName=branches.rows[0].name}
  if(!branchId&&branches.rows.length>1){const msg='Database Accurate memiliki lebih dari satu cabang. Edit WO lalu pilih Cabang Accurate sebelum dikirim.';await query(`UPDATE work_orders SET status='SYNC_ERROR',sync_error=$2,updated_at=NOW() WHERE id=$1`,[workOrderId,msg]);return Response.json({error:msg},{status:400})}
+ if(!branchId&&branches.rows.length===0){const msg='Cabang Accurate belum tersedia. Pastikan scope branch_view sudah diberikan, lalu Sinkronkan Accurate kembali.';await query(`UPDATE work_orders SET status='SYNC_ERROR',sync_error=$2,updated_at=NOW() WHERE id=$1`,[workOrderId,msg]);return Response.json({error:msg},{status:400})}
  const missingItems:string[]=[];for(const m of mats.rows){if(!m.item_no||Number(m.qty)<=0){missingItems.push(`${m.item_no||m.item_name||'Material'} (qty tidak valid)`);continue}const chk=await query<any>('SELECT 1 FROM items_cache WHERE organization_id=$1 AND item_no=$2 LIMIT 1',[auth.user.organization_id,m.item_no]);if(!chk.rows.length)missingItems.push(String(m.item_no))}
  if(missingItems.length){const msg=`Bahan baku belum ditemukan pada master Accurate: ${missingItems.join(', ')}. Sinkronkan master Accurate lalu periksa BOM/WO.`;await query(`UPDATE work_orders SET status='SYNC_ERROR',sync_error=$2,updated_at=NOW() WHERE id=$1`,[workOrderId,msg]);return Response.json({error:msg},{status:400})}
  const validCosts=costs.rows.filter((k:any)=>Number(k.amount)>0);const invalidAccounts:string[]=[];for(const k of validCosts){if(!k.account_no){invalidAccounts.push(`${k.cost_name}: akun kosong`);continue}const chk=await query<any>('SELECT 1 FROM accounts_cache WHERE organization_id=$1 AND account_no=$2 LIMIT 1',[auth.user.organization_id,k.account_no]);if(!chk.rows.length)invalidAccounts.push(`${k.cost_name}: ${k.account_no}`)}

@@ -168,3 +168,8 @@ Lebih aman set Railway variables sebelum deployment pertama yang membuat user:
 APP_ADMIN_USERNAME=admin
 APP_ADMIN_PASSWORD=<password-kuat>
 ```
+
+
+## Database Accurate multi-cabang
+
+Gunakan scope OAuth `branch_view` untuk membaca master Cabang. `branch_save` tidak diperlukan karena BOM-JOBCOSTING tidak membuat/mengedit cabang Accurate. Jika database memiliki lebih dari satu cabang, user wajib memilih Cabang Accurate pada WO. Jika hanya satu cabang, aplikasi memilihnya otomatis. Setelah menambah scope `branch_view`, Putuskan Accurate lalu Connect Accurate lagi agar token baru memiliki scope tersebut.
