@@ -1,7 +1,7 @@
 import pg from 'pg';import crypto from 'crypto';
 const {Client}=pg;if(!process.env.DATABASE_URL)throw new Error('DATABASE_URL belum di-set');const c=new Client({connectionString:process.env.DATABASE_URL,ssl:process.env.NODE_ENV==='production'?{rejectUnauthorized:false}:undefined});await c.connect();
 await c.query(`
-CREATE TABLE IF NOT EXISTS organizations(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,email TEXT,phone TEXT,status TEXT NOT NULL DEFAULT 'TRIAL',trial_ends_at TIMESTAMPTZ,subscription_started_at TIMESTAMPTZ,subscription_ends_at TIMESTAMPTZ,plan_code TEXT,max_users INTEGER NOT NULL DEFAULT 5,max_databases INTEGER NOT NULL DEFAULT 5,created_at TIMESTAMPTZ DEFAULT NOW(),updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS organizations(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,email TEXT,phone TEXT,status TEXT NOT NULL DEFAULT 'TRIAL',trial_ends_at TIMESTAMPTZ,subscription_started_at TIMESTAMPTZ,subscription_ends_at TIMESTAMPTZ,plan_code TEXT,max_users INTEGER NOT NULL DEFAULT 5,max_databases INTEGER NOT NULL DEFAULT 5,trial_job_order_used INTEGER NOT NULL DEFAULT 0,trial_rollover_used INTEGER NOT NULL DEFAULT 0,created_at TIMESTAMPTZ DEFAULT NOW(),updated_at TIMESTAMPTZ DEFAULT NOW());
 CREATE TABLE IF NOT EXISTS activation_requests(id BIGSERIAL PRIMARY KEY,organization_id BIGINT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,plan_code TEXT NOT NULL,duration_months INTEGER NOT NULL,price NUMERIC(18,2) NOT NULL,status TEXT NOT NULL DEFAULT 'PENDING',notes TEXT,requested_at TIMESTAMPTZ DEFAULT NOW(),processed_at TIMESTAMPTZ,processed_by TEXT);
 CREATE TABLE IF NOT EXISTS super_admins(id BIGSERIAL PRIMARY KEY,username TEXT UNIQUE NOT NULL,display_name TEXT NOT NULL,password_hash TEXT NOT NULL,active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ DEFAULT NOW());
 CREATE TABLE IF NOT EXISTS super_admin_sessions(token_hash TEXT PRIMARY KEY,admin_id BIGINT NOT NULL REFERENCES super_admins(id) ON DELETE CASCADE,expires_at TIMESTAMPTZ NOT NULL,created_at TIMESTAMPTZ DEFAULT NOW());
@@ -31,6 +31,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_branch_org_accid ON branches_cache(organiz
 CREATE UNIQUE INDEX IF NOT EXISTS idx_bom_org_no ON boms(organization_id,bom_no);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_wo_org_no ON work_orders(organization_id,wo_no);
 `);
+
+await c.query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS trial_job_order_used INTEGER NOT NULL DEFAULT 0`);
+await c.query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS trial_rollover_used INTEGER NOT NULL DEFAULT 0`);
+// Backfill old trial usage from logs so existing trial accounts do not regain quota after upgrade.
+await c.query(`UPDATE organizations o SET trial_job_order_used=GREATEST(COALESCE(o.trial_job_order_used,0),COALESCE((SELECT COUNT(*)::int FROM sync_logs s WHERE s.organization_id=o.id AND s.action='PUSH_JOB' AND s.status='SUCCESS'),0)) WHERE o.status='TRIAL' OR o.plan_code='TRIAL'`);
+await c.query(`UPDATE organizations o SET trial_rollover_used=GREATEST(COALESCE(o.trial_rollover_used,0),COALESCE((SELECT COUNT(DISTINCT s.entity_id)::int FROM sync_logs s WHERE s.organization_id=o.id AND s.action IN ('PUSH_ROLLOVER','CONFIRM_ROLLOVER') AND s.status IN ('SUCCESS','VERIFY'),0)) WHERE o.status='TRIAL' OR o.plan_code='TRIAL'`);
+
 for(const sql of [
  `ALTER TABLE boms DROP CONSTRAINT IF EXISTS boms_bom_no_key`,
  `ALTER TABLE work_orders DROP CONSTRAINT IF EXISTS work_orders_wo_no_key`,
