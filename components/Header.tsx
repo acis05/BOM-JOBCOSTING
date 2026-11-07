@@ -1,1 +1,1 @@
-export default function Header({title,subtitle}:{title:string,subtitle?:string}){return <div className="top"><div><h1>{title}</h1>{subtitle&&<div className="muted" style={{marginTop:6}}>{subtitle}</div>}</div></div>}
+export default function Header({title,subtitle}:{title:string;subtitle?:string}){return <div className="page-head"><h1>{title}</h1>{subtitle&&<p>{subtitle}</p>}</div>}

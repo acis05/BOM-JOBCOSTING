@@ -1,47 +1,11 @@
 import {accurateFetch} from '@/lib/accurate';import {pool} from '@/lib/db';import {getCurrentUser} from '@/lib/auth';
 type Kind='items'|'warehouses'|'accounts'|'branches';
-function rowsFromResponse(j:any):any[]{if(Array.isArray(j))return j;if(Array.isArray(j?.d))return j.d;if(Array.isArray(j?.data))return j.data;if(Array.isArray(j?.r))return j.r;if(Array.isArray(j?.r?.d))return j.r.d;return []}
-export async function fetchAll(path:string,fields:string){const out:any[]=[];const pageSize=100;let page=1;while(page<=200){const u=new URLSearchParams({'sp.page':String(page),'sp.pageSize':String(pageSize),fields});const res=await accurateFetch(`${path}?${u.toString()}`);const text=await res.text();let j:any;try{j=JSON.parse(text)}catch{throw new Error(`Accurate mengembalikan response non-API. HTTP ${res.status}`)}if(!res.ok||j?.s===false)throw new Error(j?.d?.join?.('; ')||j?.error||`Gagal membaca Accurate (${res.status})`);const rows=rowsFromResponse(j);out.push(...rows);const pageCount=Number(j?.sp?.pageCount||0);if((pageCount&&page>=pageCount)||rows.length<pageSize)break;page++}return out}
-function objectFromResponse(j:any):any{if(j?.d&&typeof j.d==='object'&&!Array.isArray(j.d))return j.d;if(j?.r&&typeof j.r==='object'&&!Array.isArray(j.r))return j.r;if(j?.data&&typeof j.data==='object'&&!Array.isArray(j.data))return j.data;return j}
-async function fetchItemDetail(id:any){if(!id)return null;const u=new URLSearchParams({id:String(id)});const res=await accurateFetch(`/api/item/detail.do?${u.toString()}`);const text=await res.text();let j:any;try{j=JSON.parse(text)}catch{return null}if(!res.ok||j?.s===false)return null;return objectFromResponse(j)}
-async function enrichMissingItemUnits(items:any[]){const missing=items.filter(x=>!x?.unit1Name&&!x?.unitName&&x?.id);const concurrency=8;for(let start=0;start<missing.length;start+=concurrency){const batch=missing.slice(start,start+concurrency);const details=await Promise.all(batch.map(x=>fetchItemDetail(x.id).catch(()=>null)));details.forEach((d,i)=>{if(!d)return;const x=batch[i];const unit=d.unit1Name||d.unitName||d.itemUnitName||null;if(unit)x.unit1Name=unit;if(!x.name&&d.name)x.name=d.name;if(!x.no&&d.no)x.no=d.no})}return items}
-export async function syncAccurateMasters(kinds:Kind[]=['items','warehouses','accounts','branches']){const me=await getCurrentUser();if(!me)throw new Error('Silakan login');const org=me.organization_id;const c=await pool.connect();const result:any={};try{if(kinds.includes('items')){
-  const rows=await fetchAll('/api/item/list.do','id,no,name,unit1Name,itemType,suspended');
-  // Accurate can theoretically return the same record more than once across pages while data changes.
-  // Deduplicate before writing the cache so sync remains deterministic.
-  const byNo=new Map<string,any>();
-  for(const x of rows){if(x?.no)byNo.set(String(x.no),x)}
-  const items=await enrichMissingItemUnits([...byNo.values()]);
-  await c.query('BEGIN');
-  // Also drop legacy global constraints here as a safety net for databases upgraded from pre multi-tenant releases.
-  await c.query('ALTER TABLE items_cache DROP CONSTRAINT IF EXISTS items_cache_item_no_key');
-  await c.query('ALTER TABLE items_cache DROP CONSTRAINT IF EXISTS items_cache_accurate_id_key');
-  await c.query('DROP INDEX IF EXISTS items_cache_item_no_key');
-  await c.query('DROP INDEX IF EXISTS items_cache_accurate_id_key');
-  await c.query('DELETE FROM items_cache WHERE organization_id=$1',[org]);
-  for(const x of items){
-    await c.query(`INSERT INTO items_cache(organization_id,accurate_id,item_no,name,unit,item_type,updated_at) VALUES($1,$2,$3,$4,$5,$6,NOW()) ON CONFLICT(organization_id,item_no) DO UPDATE SET accurate_id=EXCLUDED.accurate_id,name=EXCLUDED.name,unit=EXCLUDED.unit,item_type=EXCLUDED.item_type,updated_at=NOW()`,[org,x.id||null,x.no,x.name||x.no,x.unit1Name||x.unitName||null,x.itemType||null])
-  }
-  await c.query('COMMIT');
-  result.items=items.length
-}
-if(kinds.includes('warehouses')){const rows=await fetchAll('/api/warehouse/list.do','id,name');await c.query('BEGIN');await c.query('DELETE FROM warehouses_cache WHERE organization_id=$1',[org]);for(const x of rows){if(!x?.name)continue;await c.query(`INSERT INTO warehouses_cache(organization_id,accurate_id,name,updated_at) VALUES($1,$2,$3,NOW()) ON CONFLICT(organization_id,accurate_id) DO UPDATE SET name=EXCLUDED.name,updated_at=NOW()`,[org,x.id||null,x.name])}await c.query('COMMIT');result.warehouses=rows.length}
-if(kinds.includes('accounts')){const rows=await fetchAll('/api/glaccount/list.do','id,no,name,accountType,suspended');await c.query('BEGIN');await c.query('DELETE FROM accounts_cache WHERE organization_id=$1',[org]);for(const x of rows){if(!x?.no)continue;await c.query(`INSERT INTO accounts_cache(organization_id,accurate_id,account_no,name,account_type,updated_at) VALUES($1,$2,$3,$4,$5,NOW()) ON CONFLICT(organization_id,account_no) DO UPDATE SET accurate_id=EXCLUDED.accurate_id,name=EXCLUDED.name,account_type=EXCLUDED.account_type,updated_at=NOW()`,[org,x.id||null,x.no,x.name||x.no,x.accountType||null])}await c.query('COMMIT');result.accounts=rows.length}
-if(kinds.includes('branches')){
-  try{
-    const rows=await fetchAll('/api/branch/list.do','id,name');
-    const unique=new Map<string,any>();
-    for(const x of rows){if(!x?.name)continue;const key=String(x.id??x.name);if(!unique.has(key))unique.set(key,x)}
-    const branches=[...unique.values()];
-    await c.query('BEGIN');
-    await c.query('DELETE FROM branches_cache WHERE organization_id=$1',[org]);
-    for(const x of branches){await c.query(`INSERT INTO branches_cache(organization_id,accurate_id,name,updated_at) VALUES($1,$2,$3,NOW()) ON CONFLICT(organization_id,accurate_id) DO UPDATE SET name=EXCLUDED.name,updated_at=NOW()`,[org,x.id||null,x.name])}
-    await c.query('COMMIT');
-    result.branches=branches.length;
-  }catch(e:any){
-    // Cabang bersifat opsional untuk proses sinkron master. Jangan gagalkan item/gudang/akun.
-    // Jika database multi-cabang dan daftar cabang tidak bisa dibaca, user dapat mengisi branchName manual di WO.
-    result.branches=0;
-    result.branchWarning=String(e?.message||e||'Daftar cabang belum dapat dibaca');
-  }
-}return result}catch(e){try{await c.query('ROLLBACK')}catch{}throw e}finally{c.release()}}
+function rows(j:any){if(Array.isArray(j))return j;if(Array.isArray(j?.d))return j.d;if(Array.isArray(j?.data))return j.data;if(Array.isArray(j?.r))return j.r;if(Array.isArray(j?.r?.d))return j.r.d;return []}
+async function fetchAll(path:string,fields:string){const out:any[]=[];for(let page=1;page<=200;page++){const q=new URLSearchParams({'sp.page':String(page),'sp.pageSize':'100',fields});const r=await accurateFetch(`${path}?${q}`);const t=await r.text();let j:any;try{j=JSON.parse(t)}catch{throw new Error(`Response Accurate bukan JSON (HTTP ${r.status})`)}if(!r.ok||j?.s===false)throw new Error(j?.d?.join?.('; ')||j?.error||`Gagal membaca Accurate (${r.status})`);const x=rows(j);out.push(...x);if(x.length<100||Number(j?.sp?.pageCount||0)===page)break}return out}
+async function detailItem(id:any){if(!id)return null;const r=await accurateFetch(`/api/item/detail.do?id=${encodeURIComponent(String(id))}`);const j=await r.json().catch(()=>null);if(!r.ok||!j||j?.s===false)return null;return j.d||j.r||j.data||j}
+export async function syncAccurateMasters(kinds:Kind[]=['items','warehouses','accounts','branches']){const me=await getCurrentUser();if(!me)throw new Error('Silakan login');const org=Number(me.organization_id),c=await pool.connect();const result:any={};try{
+ if(kinds.includes('items')){let xs=await fetchAll('/api/item/list.do','id,no,name,unit1Name,itemType,suspended');const map=new Map(xs.filter(x=>x?.no).map(x=>[String(x.no),x]));xs=[...map.values()];const missing=xs.filter(x=>!x.unit1Name&&x.id);for(let i=0;i<missing.length;i+=8){const ds=await Promise.all(missing.slice(i,i+8).map(x=>detailItem(x.id).catch(()=>null)));ds.forEach((d,k)=>{if(d)missing[i+k].unit1Name=d.unit1Name||d.unitName||d.itemUnitName||null})}await c.query('BEGIN');await c.query('DELETE FROM items_cache WHERE organization_id=$1',[org]);for(const x of xs)await c.query(`INSERT INTO items_cache(organization_id,accurate_id,item_no,name,unit,item_type,updated_at) VALUES($1,$2,$3,$4,$5,$6,NOW()) ON CONFLICT(organization_id,item_no) DO UPDATE SET accurate_id=EXCLUDED.accurate_id,name=EXCLUDED.name,unit=EXCLUDED.unit,item_type=EXCLUDED.item_type,updated_at=NOW()`,[org,x.id||null,x.no,x.name||x.no,x.unit1Name||x.unitName||null,x.itemType||null]);await c.query('COMMIT');result.items=xs.length}
+ if(kinds.includes('warehouses')){const xs=await fetchAll('/api/warehouse/list.do','id,name');await c.query('BEGIN');await c.query('DELETE FROM warehouses_cache WHERE organization_id=$1',[org]);for(const x of xs)if(x.name)await c.query(`INSERT INTO warehouses_cache(organization_id,accurate_id,name) VALUES($1,$2,$3) ON CONFLICT(organization_id,accurate_id) DO UPDATE SET name=EXCLUDED.name,updated_at=NOW()`,[org,x.id||null,x.name]);await c.query('COMMIT');result.warehouses=xs.length}
+ if(kinds.includes('accounts')){const xs=await fetchAll('/api/glaccount/list.do','id,no,name,accountType,suspended');await c.query('BEGIN');await c.query('DELETE FROM accounts_cache WHERE organization_id=$1',[org]);for(const x of xs)if(x.no)await c.query(`INSERT INTO accounts_cache(organization_id,accurate_id,account_no,name,account_type) VALUES($1,$2,$3,$4,$5) ON CONFLICT(organization_id,account_no) DO UPDATE SET accurate_id=EXCLUDED.accurate_id,name=EXCLUDED.name,account_type=EXCLUDED.account_type,updated_at=NOW()`,[org,x.id||null,x.no,x.name||x.no,x.accountType||null]);await c.query('COMMIT');result.accounts=xs.length}
+ if(kinds.includes('branches')){const xs=await fetchAll('/api/branch/list.do','id,name');await c.query('BEGIN');await c.query('DELETE FROM branches_cache WHERE organization_id=$1',[org]);for(const x of xs)if(x.name)await c.query(`INSERT INTO branches_cache(organization_id,accurate_id,name) VALUES($1,$2,$3) ON CONFLICT(organization_id,accurate_id) DO UPDATE SET name=EXCLUDED.name,updated_at=NOW()`,[org,x.id||null,x.name]);await c.query('COMMIT');result.branches=xs.length}return result
+ }catch(e){try{await c.query('ROLLBACK')}catch{}throw e}finally{c.release()}}

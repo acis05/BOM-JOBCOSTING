@@ -1,0 +1,7 @@
+import {query} from '@/lib/db';
+export type TrialAction='JOB_ORDER'|'ROLL_OVER';
+export async function getTrialUsage(organizationId:number){const [org,jobs,rolls]=await Promise.all([
+ query<any>(`SELECT status,trial_ends_at,plan_code FROM organizations WHERE id=$1 LIMIT 1`,[organizationId]),
+ query<any>(`SELECT COUNT(*)::int c FROM sync_logs WHERE organization_id=$1 AND action='PUSH_JOB' AND status='SUCCESS'`,[organizationId]),
+ query<any>(`SELECT COUNT(DISTINCT entity_id)::int c FROM sync_logs WHERE organization_id=$1 AND action IN ('PUSH_ROLLOVER','CONFIRM_ROLLOVER') AND status IN ('SUCCESS','VERIFY')`,[organizationId])]);return {organization:org.rows[0]||null,jobOrderCount:Number(jobs.rows[0]?.c||0),rollOverCount:Number(rolls.rows[0]?.c||0),limit:2}}
+export async function assertTrialQuota(organizationId:number,action:TrialAction){const usage=await getTrialUsage(organizationId);const org=usage.organization;if(!org)throw new Error('Akun perusahaan tidak ditemukan.');if(org.status!=='TRIAL')return usage;const used=action==='JOB_ORDER'?usage.jobOrderCount:usage.rollOverCount;if(used>=usage.limit){const label=action==='JOB_ORDER'?'Pekerjaan Pesanan':'Roll Over';const e:any=new Error(`Batas trial sudah tercapai. Akun trial hanya dapat mengirim ${label} maksimal ${usage.limit} kali. Silakan aktivasi paket untuk melanjutkan.`);e.code='TRIAL_LIMIT';e.usage=usage;throw e}return usage}

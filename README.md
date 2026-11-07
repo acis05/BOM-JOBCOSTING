@@ -1,175 +1,77 @@
-# BOM-JOBCOSTING AOL v0.2
+# BOM-JOBCOSTING AOL v0.4.1
 
-**Dari Formula ke Job Costing Accurate Online**
+Aplikasi web pendukung Accurate Online untuk BOM / Formula → Work Order → Pekerjaan Pesanan → Roll Over.
 
-MVP Next.js + PostgreSQL untuk membuat BOM / Formula, membuat Work Order, approval, lalu mengirim WO yang disetujui ke Accurate Online Pekerjaan Pesanan.
+## Perubahan utama v0.4.1
 
-## Update v0.2
+### Accurate dipisah menjadi 2 tahap
 
-- Import BOM dari Excel `.xlsx`
-- Import WO dari Excel `.xlsx`
-- List, edit, delete, preview & print BOM
-- List, edit, delete, preview & print WO
-- Halaman Accurate Sync disederhanakan (tanpa istilah teknis untuk user)
-- Fix OAuth callback agar kembali ke domain publik, bukan `localhost:8080`
-- Sinkron master Accurate: Item, Warehouse, GL Account
-- Pilihan Barang & Akun Accurate muncul saat membuat/edit BOM
-- Pilihan Gudang Accurate muncul saat membuat/edit WO
-- Push WO approved langsung ke `/api/job-order/bulk-save.do`
+1. **Step 1 · Kirim Pekerjaan Pesanan**
+   - Pengiriman pertama membuat Pekerjaan Pesanan di Accurate.
+   - WO berubah menjadi `SYNCED / JOB SENT`.
+   - WO dapat diedit lagi selama belum Roll Over.
+   - Tombol **Kirim Tahap Berikutnya** mengirim perubahan ke Pekerjaan Pesanan yang sama menggunakan `accurate_job_id`.
+   - Setiap pengiriman Step 1 yang sukses dicatat di `sync_logs`.
+
+2. **Step 2 · Kirim Roll Over**
+   - Dilakukan saat pekerjaan siap difinishing.
+   - Tidak otomatis berjalan setelah Step 1.
+   - Bila Accurate memberi response konflik tetapi transaksi kemungkinan sudah terbentuk, status menjadi `ROLLOVER_VERIFY` dan user dapat memakai **Tandai Sudah Masuk** setelah mengecek Accurate.
+
+## Limit Trial
+
+Trial 3 hari, maksimal:
+
+- 5 user
+- 5 database Accurate
+- **2 kali pengiriman Step 1 Pekerjaan Pesanan**
+- **2 WO Roll Over / Penyelesaian Pesanan**
+
+Pengiriman ketiga akan mendapat HTTP 402 dan tombol **Aktivasi Paket**.
+
+Untuk paket `ACTIVE`, limit transaksi trial tidak berlaku.
+
+## Paket
+
+- 6 Bulan: **Rp 3.000.000**
+- 1 Tahun: **Rp 5.000.000**
+- Maks. 5 user
+- Maks. 5 database Accurate
 
 ## Railway Variables
 
 ```text
 DATABASE_URL=${{Postgres.DATABASE_URL}}
+APP_URL=https://bomjobcosting.acisapps.id
 ACCURATE_CLIENT_ID=...
 ACCURATE_CLIENT_SECRET=...
 ACCURATE_REDIRECT_URI=https://bomjobcosting.acisapps.id/api/accurate/oauth/callback
 ACCURATE_SCOPE=item_view warehouse_view glaccount_view branch_view job_order_save roll_over_save
+SUPER_ADMIN_USERNAME=superadmin
+SUPER_ADMIN_PASSWORD=GANTI_PASSWORD_KUAT
 ```
 
-Opsional, tapi disarankan:
+Opsional untuk instalasi pertama:
 
 ```text
-APP_URL=https://bomjobcosting.acisapps.id
+APP_ADMIN_USERNAME=admin
+APP_ADMIN_PASSWORD=admin123
 ```
 
-## Accurate Developer Area
-
-Website URL:
-
-```text
-https://bomjobcosting.acisapps.id
-```
-
-OAuth Callback:
-
-```text
-https://bomjobcosting.acisapps.id/api/accurate/oauth/callback
-```
-
-## Railway
-
-`railway.json` sudah mengatur:
-
-- Pre-deploy: `npm run db:migrate`
-- Start: `npm start`
-- Health check: `/api/health`
-
-Jadi jangan set `npm run db:migrate` sebagai Start Command.
-
-## Alur Koneksi Accurate
-
-1. Accurate Sync → Connect Accurate Online
-2. Give Access
-3. Kembali otomatis ke `/accurate`
-4. Klik `Tampilkan Database`
-5. Pilih database
-6. Aplikasi otomatis mencoba sync Barang, Gudang, dan Akun
-7. Jika diperlukan tekan `Sinkronkan Sekarang`
-
-Setelah sync, halaman New BOM akan menampilkan pilihan item dan akun dari Accurate.
-
-## Template Excel
-
-Tersedia langsung dari halaman BOM/WO dan juga di:
-
-```text
-/public/templates/template-import-bom.xlsx
-/public/templates/template-import-wo.xlsx
-```
-
-### BOM Excel
-
-Kolom template:
-
-```text
-BOM No
-Formula Name
-Product Item No
-Product Name
-Output Qty
-Material Item No
-Material Name
-Material Qty
-Material Unit
-Cost Name
-Account No
-Cost Amount
-Notes
-```
-
-Satu BOM dapat memakai beberapa baris. Ulangi `BOM No`, formula dan product pada setiap baris material.
-
-### WO Excel
-
-Kolom:
-
-```text
-WO No
-BOM No
-Planned Qty
-Warehouse
-WO Date
-Notes
-```
-
-WO yang diimpor akan mengambil material dan biaya dari BOM lalu dikalikan sesuai Planned Qty.
-
-## Menjalankan lokal
+## Deploy
 
 ```bash
 npm install
-npm run db:migrate
-npm run dev
+npm run build
+npm start
 ```
 
-## Update GitHub existing repository
+Railway memakai `npm start`; `scripts/start.mjs` menjalankan migration lebih dahulu lalu menjalankan Next.js.
 
-Extract ZIP ini, copy seluruh file ke repository lama (replace file yang sama), lalu:
+## URL
 
-```bash
-git add .
-git commit -m "BOM-JOBCOSTING v0.2"
-git push
-```
-
-Railway akan redeploy dari GitHub.
-
-## v0.2.9 - Login & Hak Akses
-
-Tambahkan environment variable Railway (disarankan):
-
-```text
-APP_ADMIN_USERNAME=admin
-APP_ADMIN_PASSWORD=GANTI_PASSWORD_KUAT
-```
-
-Jika variable tersebut belum diisi saat user pertama dibuat, default awal adalah `admin` / `admin123`. Segera ganti password melalui menu **Hak Akses**.
-
-Hak akses tersedia per fitur: BOM, WO, Approval, Accurate Connection/Sync, Push Job, Roll Over, dan pengelolaan user/role.
-
-## v0.2.9 - Roll Over Produk Jadi, Hapus, Hak Akses
-
-- Tombol **Kirim Job + Hasil Jadi** membuat Pekerjaan Pesanan dan langsung mencoba Roll Over tipe ITEM untuk produk jadi pada WO.
-- Jika Job Order sukses tetapi Roll Over gagal, status menjadi `ROLLOVER_ERROR`; gunakan **Retry Hasil Jadi** tanpa membuat Job Order baru.
-- Daftar BOM dan WO memiliki tombol **Hapus** sesuai permission. Menghapus WO lokal tidak menghapus transaksi yang sudah ada di Accurate.
-- Menu **Hak Akses** menyediakan User, Role, dan permission per fitur termasuk Approval.
-
-Login pertama setelah upgrade:
-
-```text
-Username: admin
-Password: admin123
-```
-
-Lebih aman set Railway variables sebelum deployment pertama yang membuat user:
-
-```text
-APP_ADMIN_USERNAME=admin
-APP_ADMIN_PASSWORD=<password-kuat>
-```
-
-
-## Database Accurate multi-cabang
-
-Gunakan scope OAuth `branch_view` untuk membaca master Cabang. `branch_save` tidak diperlukan karena BOM-JOBCOSTING tidak membuat/mengedit cabang Accurate. Jika database memiliki lebih dari satu cabang, user wajib memilih Cabang Accurate pada WO. Jika hanya satu cabang, aplikasi memilihnya otomatis. Setelah menambah scope `branch_view`, Putuskan Accurate lalu Connect Accurate lagi agar token baru memiliki scope tersebut.
+- Customer login: `/login`
+- Daftar trial: `/register`
+- Paket/aktivasi: `/subscription`
+- Super Admin: `/admin/login`
+- Health check: `/api/health`

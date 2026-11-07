@@ -1,2 +1,1 @@
-import {requireApiPermission} from '@/lib/auth';
-import{NextResponse}from'next/server';import{oauthAuthorizeUrl}from'@/lib/accurate';export async function GET(){const auth=await requireApiPermission('accurate.connect');if(!auth.ok)return auth.response;if(!process.env.ACCURATE_CLIENT_ID||!process.env.ACCURATE_REDIRECT_URI)return NextResponse.json({error:'ACCURATE_CLIENT_ID / REDIRECT_URI belum diset'},{status:400});return NextResponse.redirect(oauthAuthorizeUrl())}
+import {NextResponse} from 'next/server';import {requireApiPermission} from '@/lib/auth';import {oauthAuthorizeUrl} from '@/lib/accurate';export async function GET(){const a=await requireApiPermission('accurate.connect');if(!a.ok)return a.response;return NextResponse.redirect(oauthAuthorizeUrl())}

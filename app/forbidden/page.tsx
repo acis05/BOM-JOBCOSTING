@@ -1,2 +1,1 @@
-import Link from 'next/link';import {getCurrentUser} from '@/lib/auth';import {redirect} from 'next/navigation';
-export default async function Page(){const u=await getCurrentUser();if(!u)redirect('/login');return <div className="card" style={{maxWidth:620,margin:'40px auto'}}><h2>Akses tidak diizinkan</h2><p className="muted">User Anda tidak memiliki hak akses ke fitur tersebut. Hubungi Administrator untuk mengubah Role & Permission.</p><Link className="btn" href="/">Kembali</Link></div>}
+export default function Page(){return <div className="card"><h1>Akses Ditolak</h1><p>Anda tidak memiliki hak akses untuk halaman ini.</p></div>}
