@@ -8,14 +8,16 @@ type Acc={account_no:string;name:string};
 type MaterialLine={itemNo:string;itemName:string;qty:string;unit:string};
 type CostLine={costName:string;accountNo:string;amount:string};
 
-const fm=(v:any)=>{const n=Number(String(v??'').replace(/\D/g,''));return n?new Intl.NumberFormat('id-ID').format(n):''};
-const raw=(v:string)=>v.replace(/\D/g,'');
+const moneyNumber=(v:any)=>{if(typeof v==='number')return Number.isFinite(v)?v:0;const s=String(v??'').trim();if(!s)return 0;if(/^-?\d+(?:\.\d+)?$/.test(s)){const n=Number(s);return Number.isFinite(n)?n:0}const n=Number(s.replace(/\./g,'').replace(',', '.').replace(/[^0-9.-]/g,''));return Number.isFinite(n)?n:0};
+const fm=(v:any)=>{const n=moneyNumber(v);if(!n)return '';return new Intl.NumberFormat('id-ID',{minimumFractionDigits:0,maximumFractionDigits:Number.isInteger(n)?0:2}).format(n)};
+const raw=(v:string)=>String(Math.round(moneyNumber(v)));
 function dval(v:any){if(!v)return new Date().toISOString().slice(0,10);const s=String(v);const m=s.match(/^(\d{4}-\d{2}-\d{2})/);if(m)return m[1];const d=new Date(v);return Number.isNaN(d.getTime())?new Date().toISOString().slice(0,10):d.toISOString().slice(0,10)}
 function positiveNumber(v:any){const n=Number(v);return Number.isFinite(n)&&n>0?n:0}
+function qtyText(v:any){const n=Number(v);if(!Number.isFinite(n))return '';return Number.isInteger(n)?String(n):String(Number(n.toFixed(4)))}
 
 export default function WoForm({boms,warehouses=[],branches=[],accounts=[],initial,id}:{boms:any[];warehouses?:Opt[];branches?:any[];accounts?:Acc[];initial?:any;id?:string}){
   const r=useRouter();
-  const initialPlanned=initial?.planned_qty!=null?String(initial.planned_qty):'1';
+  const initialPlanned=initial?.planned_qty!=null?qtyText(initial.planned_qty):'1';
   const [b,setB]=useState({
     woNo:initial?.wo_no||'',
     bomId:String(initial?.bom_id||boms[0]?.id||''),
@@ -26,8 +28,8 @@ export default function WoForm({boms,warehouses=[],branches=[],accounts=[],initi
     woDate:dval(initial?.wo_date),
     notes:initial?.notes||''
   });
-  const [mats,setMats]=useState<MaterialLine[]>((initial?.materials||[]).map((m:any)=>({itemNo:m.item_no,itemName:m.item_name,qty:String(m.qty),unit:m.unit||''})));
-  const [costs,setCosts]=useState<CostLine[]>((initial?.costs||[]).map((x:any)=>({costName:x.cost_name,accountNo:x.account_no||'',amount:String(x.amount||0)})));
+  const [mats,setMats]=useState<MaterialLine[]>((initial?.materials||[]).map((m:any)=>({itemNo:m.item_no,itemName:m.item_name,qty:qtyText(m.qty),unit:m.unit||''})));
+  const [costs,setCosts]=useState<CostLine[]>((initial?.costs||[]).map((x:any)=>({costName:x.cost_name,accountNo:x.account_no||'',amount:String(moneyNumber(x.amount||0))})));
   const [msg,setMsg]=useState('');
   const lastValidQty=useRef(positiveNumber(initial?.planned_qty)||1);
   const loadedBom=useRef('');
@@ -41,8 +43,8 @@ export default function WoForm({boms,warehouses=[],branches=[],accounts=[],initi
     const planned=positiveNumber(b.plannedQty)||1;
     const output=positiveNumber(j.output_qty)||1;
     const scale=planned/output;
-    setMats((j.materials||[]).map((m:any)=>({itemNo:m.item_no,itemName:m.item_name,qty:String(Number(m.qty||0)*scale),unit:m.unit||''})));
-    setCosts((j.costs||[]).map((k:any)=>({costName:k.cost_name||accounts.find(a=>a.account_no===k.account_no)?.name||'',accountNo:k.account_no||'',amount:String(Number(k.amount||0)*scale)})));
+    setMats((j.materials||[]).map((m:any)=>({itemNo:m.item_no,itemName:m.item_name,qty:qtyText(Number(m.qty||0)*scale),unit:m.unit||''})));
+    setCosts((j.costs||[]).map((k:any)=>({costName:k.cost_name||accounts.find(a=>a.account_no===k.account_no)?.name||'',accountNo:k.account_no||'',amount:String(moneyNumber(k.amount||0)*scale)})));
     lastValidQty.current=planned;
     loadedBom.current=bomId;
     setMsg('');
@@ -60,8 +62,8 @@ export default function WoForm({boms,warehouses=[],branches=[],accounts=[],initi
     const prev=lastValidQty.current;
     if(!now||!prev||now===prev)return;
     const ratio=now/prev;
-    setMats(lines=>lines.map(m=>({...m,qty:String(Number(m.qty||0)*ratio)})));
-    setCosts(lines=>lines.map(k=>({...k,amount:String(Number(k.amount||0)*ratio)})));
+    setMats(lines=>lines.map(m=>({...m,qty:qtyText(Number(m.qty||0)*ratio)})));
+    setCosts(lines=>lines.map(k=>({...k,amount:String(moneyNumber(k.amount||0)*ratio)})));
     lastValidQty.current=now;
   },[b.plannedQty]);
 
