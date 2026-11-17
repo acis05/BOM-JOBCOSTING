@@ -46,7 +46,7 @@ APP_URL=https://bomjobcosting.acisapps.id
 ACCURATE_CLIENT_ID=...
 ACCURATE_CLIENT_SECRET=...
 ACCURATE_REDIRECT_URI=https://bomjobcosting.acisapps.id/api/accurate/oauth/callback
-ACCURATE_SCOPE=item_view warehouse_view glaccount_view branch_view job_order_save roll_over_save
+ACCURATE_SCOPE=item_view warehouse_view glaccount_view branch_view department_view project_view job_order_save roll_over_save
 SUPER_ADMIN_USERNAME=superadmin
 SUPER_ADMIN_PASSWORD=GANTI_PASSWORD_KUAT
 ```
@@ -75,3 +75,12 @@ Railway memakai `npm start`; `scripts/start.mjs` menjalankan migration lebih dah
 - Paket/aktivasi: `/subscription`
 - Super Admin: `/admin/login`
 - Health check: `/api/health`
+
+## v0.4.8 - Department & Project Master Sync
+Accurate master sync sekarang juga mengambil Department dan Project. Pastikan Railway variable menggunakan scope berikut:
+
+`ACCURATE_SCOPE=item_view warehouse_view glaccount_view branch_view department_view project_view job_order_save roll_over_save`
+
+Setelah deploy dari versi lama: update variable di Railway, Putuskan Accurate, Connect Accurate kembali, pilih database, lalu klik Sinkronkan Sekarang.
+
+Department disimpan/dikirim memakai nama. Project dropdown menampilkan `Project No — Project Name`, sedangkan Job Order dikirim memakai `projectNo` sesuai API Accurate. Project suspended tidak ditampilkan.

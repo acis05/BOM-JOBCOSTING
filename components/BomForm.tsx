@@ -3,13 +3,13 @@ import {useState} from 'react';
 import {useRouter} from 'next/navigation';
 
 type Item={item_no:string;name:string;unit?:string};
-type Acc={account_no:string;name:string};
+type Acc={account_no:string;name:string};type Dept={name:string};type Project={project_no:string|null;name:string};
 const moneyNumber=(v:any)=>{if(typeof v==='number')return Number.isFinite(v)?v:0;const s=String(v??'').trim();if(!s)return 0;if(/^-?\d+(?:\.\d+)?$/.test(s)){const n=Number(s);return Number.isFinite(n)?n:0}const n=Number(s.replace(/\./g,'').replace(',', '.').replace(/[^0-9.-]/g,''));return Number.isFinite(n)?n:0};
 const fm=(v:any)=>{const n=moneyNumber(v);if(!n)return '';return new Intl.NumberFormat('id-ID',{minimumFractionDigits:0,maximumFractionDigits:Number.isInteger(n)?0:2}).format(n)};
 const raw=(v:string)=>String(Math.round(moneyNumber(v)));
 const qtyText=(v:any)=>{const n=Number(v);if(!Number.isFinite(n))return '';return Number.isInteger(n)?String(n):String(Number(n.toFixed(4)))};
 
-export default function BomForm({items,accounts,initial,id}:{items:Item[];accounts:Acc[];initial?:any;id?:string}){
+export default function BomForm({items,accounts,departments=[],projects=[],initial,id}:{items:Item[];accounts:Acc[];departments?:Dept[];projects?:Project[];initial?:any;id?:string}){
   const r=useRouter();
   const[b,setB]=useState({bomNo:initial?.bom_no||'',name:initial?.name||'',productItemNo:initial?.product_item_no||'',productName:initial?.product_name||'',productUnit:initial?.product_unit||'',outputQty:qtyText(initial?.output_qty??1),notes:initial?.notes||''});
   const[materials,setMaterials]=useState((initial?.materials||[{item_no:'',item_name:'',qty:1,unit:''}]).map((m:any)=>({itemNo:m.item_no||m.itemNo||'',itemName:m.item_name||m.itemName||'',qty:qtyText(m.qty??1),unit:m.unit||'',detailNotes:m.detail_notes||m.detailNotes||'',departmentName:m.department_name||m.departmentName||'',projectNo:m.project_no||m.projectNo||''})));
@@ -35,8 +35,8 @@ export default function BomForm({items,accounts,initial,id}:{items:Item[];accoun
           <label>Qty<input className="input" type="number" step="0.0001" value={m.qty} onChange={e=>{const x=[...materials];x[i]={...m,qty:e.target.value};setMaterials(x)}}/></label>
           <label>Satuan<input className="input" value={m.unit} readOnly placeholder="Dari Accurate"/></label>
           <label className="span2">Keterangan Detail<input className="input" value={m.detailNotes} onChange={e=>{const x=[...materials];x[i]={...m,detailNotes:e.target.value};setMaterials(x)}} placeholder="Opsional"/></label>
-          <label>Departemen<input className="input" value={m.departmentName} onChange={e=>{const x=[...materials];x[i]={...m,departmentName:e.target.value};setMaterials(x)}} placeholder="Opsional - nama departemen Accurate"/></label>
-          <label>Project<input className="input" value={m.projectNo} onChange={e=>{const x=[...materials];x[i]={...m,projectNo:e.target.value};setMaterials(x)}} placeholder="Opsional - nomor project Accurate"/></label>
+          <label>Departemen<select className="select" value={m.departmentName} onChange={e=>{const x=[...materials];x[i]={...m,departmentName:e.target.value};setMaterials(x)}}><option value="">-- opsional --</option>{m.departmentName&&!departments.some(d=>d.name===m.departmentName)&&<option value={m.departmentName}>{m.departmentName} (lama)</option>}{departments.map(d=><option key={d.name} value={d.name}>{d.name}</option>)}</select></label>
+          <label>Project<select className="select" value={m.projectNo} onChange={e=>{const x=[...materials];x[i]={...m,projectNo:e.target.value};setMaterials(x)}}><option value="">-- opsional --</option>{m.projectNo&&!projects.some(p=>p.project_no===m.projectNo)&&<option value={m.projectNo}>{m.projectNo} (lama)</option>}{projects.filter(p=>p.project_no).map(p=><option key={p.project_no!} value={p.project_no!}>{p.project_no} — {p.name}</option>)}</select></label>
         </div>
         <button type="button" className="btn red" onClick={()=>setMaterials(materials.filter((_:any,j:number)=>j!==i))}>Hapus Bahan</button>
       </div>)}
@@ -49,8 +49,8 @@ export default function BomForm({items,accounts,initial,id}:{items:Item[];accoun
           <label>Akun<select className="select" value={k.accountNo} onChange={e=>{const a=accounts.find(z=>z.account_no===e.target.value);const x=[...costs];x[i]={...k,accountNo:e.target.value,costName:k.costName.trim()?k.costName:(a?.name||'')};setCosts(x)}}><option value="">-- pilih akun Accurate --</option>{accounts.map(a=><option key={a.account_no} value={a.account_no}>{a.account_no} — {a.name}</option>)}</select></label>
           <label>Jumlah<input className="input" inputMode="numeric" value={fm(k.amount)} onChange={e=>{const x=[...costs];x[i]={...k,amount:raw(e.target.value)};setCosts(x)}}/></label>
           <label>Keterangan Detail<input className="input" value={k.expenseNotes} onChange={e=>{const x=[...costs];x[i]={...k,expenseNotes:e.target.value};setCosts(x)}} placeholder="Opsional"/></label>
-          <label>Departemen<input className="input" value={k.departmentName} onChange={e=>{const x=[...costs];x[i]={...k,departmentName:e.target.value};setCosts(x)}} placeholder="Opsional - nama departemen Accurate"/></label>
-          <label>Project<input className="input" value={k.projectNo} onChange={e=>{const x=[...costs];x[i]={...k,projectNo:e.target.value};setCosts(x)}} placeholder="Opsional - disimpan di aplikasi"/></label>
+          <label>Departemen<select className="select" value={k.departmentName} onChange={e=>{const x=[...costs];x[i]={...k,departmentName:e.target.value};setCosts(x)}}><option value="">-- opsional --</option>{k.departmentName&&!departments.some(d=>d.name===k.departmentName)&&<option value={k.departmentName}>{k.departmentName} (lama)</option>}{departments.map(d=><option key={d.name} value={d.name}>{d.name}</option>)}</select></label>
+          <label>Project<select className="select" value={k.projectNo} onChange={e=>{const x=[...costs];x[i]={...k,projectNo:e.target.value};setCosts(x)}}><option value="">-- opsional --</option>{k.projectNo&&!projects.some(p=>p.project_no===k.projectNo)&&<option value={k.projectNo}>{k.projectNo} (lama)</option>}{projects.filter(p=>p.project_no).map(p=><option key={p.project_no!} value={p.project_no!}>{p.project_no} — {p.name}</option>)}</select></label>
         </div>
         <button type="button" className="btn red" onClick={()=>setCosts(costs.filter((_:any,j:number)=>j!==i))}>Hapus Biaya</button>
       </div>)}

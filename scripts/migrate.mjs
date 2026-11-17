@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS items_cache(id SERIAL PRIMARY KEY,organization_id BIG
 CREATE TABLE IF NOT EXISTS warehouses_cache(id SERIAL PRIMARY KEY,organization_id BIGINT REFERENCES organizations(id),accurate_id BIGINT,name TEXT NOT NULL,updated_at TIMESTAMPTZ DEFAULT NOW());
 CREATE TABLE IF NOT EXISTS accounts_cache(id SERIAL PRIMARY KEY,organization_id BIGINT REFERENCES organizations(id),accurate_id BIGINT,account_no TEXT,name TEXT NOT NULL,account_type TEXT,updated_at TIMESTAMPTZ DEFAULT NOW());
 CREATE TABLE IF NOT EXISTS branches_cache(id SERIAL PRIMARY KEY,organization_id BIGINT REFERENCES organizations(id),accurate_id BIGINT,name TEXT NOT NULL,updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS departments_cache(id SERIAL PRIMARY KEY,organization_id BIGINT REFERENCES organizations(id),accurate_id BIGINT,name TEXT NOT NULL,description TEXT,updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS projects_cache(id SERIAL PRIMARY KEY,organization_id BIGINT REFERENCES organizations(id),accurate_id BIGINT,project_no TEXT,name TEXT NOT NULL,description TEXT,suspended BOOLEAN NOT NULL DEFAULT FALSE,updated_at TIMESTAMPTZ DEFAULT NOW());
 CREATE TABLE IF NOT EXISTS boms(id BIGSERIAL PRIMARY KEY,organization_id BIGINT REFERENCES organizations(id),bom_no TEXT NOT NULL,name TEXT NOT NULL,product_item_no TEXT NOT NULL,product_name TEXT NOT NULL,product_unit TEXT,output_qty NUMERIC(18,4) NOT NULL DEFAULT 1,notes TEXT,status TEXT NOT NULL DEFAULT 'ACTIVE',created_at TIMESTAMPTZ DEFAULT NOW(),updated_at TIMESTAMPTZ DEFAULT NOW());
 CREATE TABLE IF NOT EXISTS bom_materials(id BIGSERIAL PRIMARY KEY,bom_id BIGINT NOT NULL REFERENCES boms(id) ON DELETE CASCADE,item_no TEXT NOT NULL,item_name TEXT NOT NULL,qty NUMERIC(18,4) NOT NULL,unit TEXT);
 CREATE TABLE IF NOT EXISTS bom_costs(id BIGSERIAL PRIMARY KEY,bom_id BIGINT NOT NULL REFERENCES boms(id) ON DELETE CASCADE,cost_name TEXT NOT NULL,account_no TEXT,amount NUMERIC(18,2) NOT NULL DEFAULT 0);
@@ -28,6 +30,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_items_org_accid ON items_cache(organizatio
 CREATE UNIQUE INDEX IF NOT EXISTS idx_wh_org_accid ON warehouses_cache(organization_id,accurate_id) WHERE accurate_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_acc_org_no ON accounts_cache(organization_id,account_no) WHERE account_no IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_branch_org_accid ON branches_cache(organization_id,accurate_id) WHERE accurate_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dept_org_name ON departments_cache(organization_id,name);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dept_org_accid ON departments_cache(organization_id,accurate_id) WHERE accurate_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_project_org_accid_full ON projects_cache(organization_id,accurate_id);
+CREATE INDEX IF NOT EXISTS idx_project_org_no ON projects_cache(organization_id,project_no);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_bom_org_no ON boms(organization_id,bom_no);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_wo_org_no ON work_orders(organization_id,wo_no);
 `);
@@ -67,7 +73,7 @@ for(const sql of [
 const hashPassword=(p)=>{const salt=crypto.randomBytes(16).toString('hex');return `${salt}:${crypto.scryptSync(p,salt,64).toString('hex')}`};
 const perms=['dashboard.view','bom.view','bom.create','bom.edit','bom.delete','bom.import','bom.print','wo.view','wo.create','wo.edit','wo.delete','wo.import','wo.print','approval.view','approval.approve','accurate.view','accurate.connect','accurate.sync','accurate.push_job','accurate.rollover','access.manage'];
 let org=(await c.query(`SELECT id FROM organizations ORDER BY id LIMIT 1`)).rows[0];if(!org)org=(await c.query(`INSERT INTO organizations(name,status,plan_code,subscription_started_at,subscription_ends_at) VALUES('Internal / Existing Account','ACTIVE','YEARLY',NOW(),NOW()+INTERVAL '10 years') RETURNING id`)).rows[0];
-for(const t of ['app_users','app_roles','accurate_connections','items_cache','warehouses_cache','accounts_cache','branches_cache','boms','work_orders','sync_logs'])await c.query(`UPDATE ${t} SET organization_id=$1 WHERE organization_id IS NULL`,[org.id]).catch(()=>{});
+for(const t of ['app_users','app_roles','accurate_connections','items_cache','warehouses_cache','accounts_cache','branches_cache','departments_cache','projects_cache','boms','work_orders','sync_logs'])await c.query(`UPDATE ${t} SET organization_id=$1 WHERE organization_id IS NULL`,[org.id]).catch(()=>{});
 let role=(await c.query(`SELECT id FROM app_roles WHERE organization_id=$1 ORDER BY id LIMIT 1`,[org.id])).rows[0];if(!role)role=(await c.query(`INSERT INTO app_roles(organization_id,name,display_name) VALUES($1,$2,'Administrator') RETURNING id`,[org.id,`ORG${org.id}:Administrator`])).rows[0];for(const p of perms)await c.query(`INSERT INTO app_role_permissions(role_id,permission_key) VALUES($1,$2) ON CONFLICT DO NOTHING`,[role.id,p]);
 if(Number((await c.query('SELECT COUNT(*) c FROM app_users')).rows[0].c||0)===0){const u=(await c.query(`INSERT INTO app_users(organization_id,username,display_name,password_hash) VALUES($1,$2,'Administrator',$3) RETURNING id`,[org.id,process.env.APP_ADMIN_USERNAME||'admin',hashPassword(process.env.APP_ADMIN_PASSWORD||'admin123')])).rows[0];await c.query(`INSERT INTO app_user_roles(user_id,role_id) VALUES($1,$2)`,[u.id,role.id])}
 if(Number((await c.query('SELECT COUNT(*) c FROM super_admins')).rows[0].c||0)===0)await c.query(`INSERT INTO super_admins(username,display_name,password_hash) VALUES($1,'Super Admin',$2)`,[process.env.SUPER_ADMIN_USERNAME||'superadmin',hashPassword(process.env.SUPER_ADMIN_PASSWORD||'ChangeMe123!')]);
