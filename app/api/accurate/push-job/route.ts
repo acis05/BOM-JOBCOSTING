@@ -2,6 +2,7 @@ import {requireApiPermission} from '@/lib/auth';
 import {query} from '@/lib/db';
 import {accurateFetch,accurateDate} from '@/lib/accurate';
 import {reserveTrialQuota,releaseTrialQuota} from '@/lib/trial-quota';
+import {assertBranchAccess} from '@/lib/branch-access';
 
 function message(j:any,t:string,s:number){const a:string[]=[];if(Array.isArray(j?.d))a.push(...j.d.map((x:any)=>typeof x==='string'?x:JSON.stringify(x)));else if(typeof j?.d==='string')a.push(j.d);if(j?.error)a.push(String(j.error));if(j?.message)a.push(String(j.message));if(!a.length&&t)a.push(t.slice(0,800));return a.join('; ')||`Accurate menolak Pekerjaan Pesanan (HTTP ${s})`}
 
@@ -12,6 +13,7 @@ export async function POST(req:Request){
     const body=await req.json();workOrderId=Number(body.workOrderId);
     const wo=(await query<any>('SELECT * FROM work_orders WHERE id=$1 AND organization_id=$2',[workOrderId,org])).rows[0];
     if(!wo)return Response.json({error:'WO tidak ditemukan.'},{status:404});
+    try{await assertBranchAccess(Number(a.user.id),org,wo.branch_id,wo.branch_name)}catch{return Response.json({error:'Anda tidak memiliki akses ke cabang WO ini.'},{status:403})}
     if(wo.accurate_job_no||wo.accurate_job_id)return Response.json({error:'Step 1 sudah pernah dikirim untuk WO ini. Pekerjaan Pesanan tidak boleh dikirim dua kali. Jika ingin membuat ulang, hapus WO dan buat WO baru.'},{status:409});
     if(!['APPROVED','SYNC_ERROR'].includes(wo.status))return Response.json({error:'WO harus APPROVED sebelum Step 1 dikirim.'},{status:400});
     if(!String(wo.warehouse_name||'').trim())return Response.json({error:'Gudang wajib dipilih sebelum Pekerjaan Pesanan dikirim ke Accurate. Silakan edit WO dan pilih Gudang.'},{status:400});

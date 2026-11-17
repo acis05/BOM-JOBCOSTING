@@ -2,13 +2,15 @@ import {requireApiPermission} from '@/lib/auth';
 import {pushWorkOrderRollover} from '@/lib/rollover';
 import {query} from '@/lib/db';
 import {reserveTrialQuota,releaseTrialQuota} from '@/lib/trial-quota';
+import {assertBranchAccess} from '@/lib/branch-access';
 
 export async function POST(req:Request){
   const a=await requireApiPermission('accurate.rollover');if(!a.ok)return a.response;
   const org=Number(a.user.organization_id),{workOrderId}=await req.json();let reserved=false;
   try{
-    const w=(await query<any>('SELECT status,accurate_job_no FROM work_orders WHERE id=$1 AND organization_id=$2',[Number(workOrderId),org])).rows[0];
+    const w=(await query<any>('SELECT status,accurate_job_no,branch_id,branch_name FROM work_orders WHERE id=$1 AND organization_id=$2',[Number(workOrderId),org])).rows[0];
     if(!w)return Response.json({error:'WO tidak ditemukan.'},{status:404});
+    try{await assertBranchAccess(Number(a.user.id),org,w.branch_id,w.branch_name)}catch{return Response.json({error:'Anda tidak memiliki akses ke cabang WO ini.'},{status:403})}
     if(!w.accurate_job_no)return Response.json({error:'Step 1 belum dilakukan.'},{status:400});
     if(!['SYNCED','ROLLOVER_ERROR'].includes(String(w.status)))return Response.json({error:'WO belum siap untuk Roll Over atau sudah selesai.'},{status:400});
 

@@ -38,6 +38,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_bom_org_no ON boms(organization_id,bom_no)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_wo_org_no ON work_orders(organization_id,wo_no);
 `);
 
+// v0.4.9 - per-user Accurate branch access. Existing users default to ALL for backward compatibility.
+await c.query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS branch_access_mode TEXT NOT NULL DEFAULT 'ALL'`);
+await c.query(`CREATE TABLE IF NOT EXISTS app_user_branch_access(user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,branch_accurate_id BIGINT NOT NULL,PRIMARY KEY(user_id,branch_accurate_id))`);
+await c.query(`CREATE INDEX IF NOT EXISTS idx_user_branch_access_user ON app_user_branch_access(user_id)`);
+
 await c.query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS trial_job_order_used INTEGER NOT NULL DEFAULT 0`);
 await c.query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS trial_rollover_used INTEGER NOT NULL DEFAULT 0`);
 // v0.4.7 - optional BOM/WO detail metadata for Accurate Job Order.

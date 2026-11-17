@@ -84,3 +84,8 @@ Accurate master sync sekarang juga mengambil Department dan Project. Pastikan Ra
 Setelah deploy dari versi lama: update variable di Railway, Putuskan Accurate, Connect Accurate kembali, pilih database, lalu klik Sinkronkan Sekarang.
 
 Department disimpan/dikirim memakai nama. Project dropdown menampilkan `Project No — Project Name`, sedangkan Job Order dikirim memakai `projectNo` sesuai API Accurate. Project suspended tidak ditampilkan.
+
+
+## v0.4.9
+- Branch Access per User: ALL/LIMITED dari master Cabang Accurate.
+- Filter dan validasi cabang diterapkan pada WO, Approval, Preview, Step 1, Step 2, dan Import WO.
