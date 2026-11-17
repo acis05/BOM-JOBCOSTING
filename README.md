@@ -89,3 +89,8 @@ Department disimpan/dikirim memakai nama. Project dropdown menampilkan `Project 
 ## v0.4.9
 - Branch Access per User: ALL/LIMITED dari master Cabang Accurate.
 - Filter dan validasi cabang diterapkan pada WO, Approval, Preview, Step 1, Step 2, dan Import WO.
+
+### Scope OAuth v0.5.0
+Source selalu menggabungkan scope wajib Accurate dengan `ACCURATE_SCOPE` dari Railway, sehingga variable lama tidak dapat menghapus `branch_view`, `department_view`, atau `project_view`. Setelah upgrade dari token lama, tetap lakukan **Putuskan Accurate -> Connect Accurate Online** sekali agar token baru memperoleh scope tambahan.
+
+Jika Cabang tetap HTTP 403 setelah OAuth ulang, pastikan fitur **Multi Branch** aktif dan user Accurate yang dipakai memang mempunyai akses cabang. Untuk Departemen/Project, pastikan fitur **Cost & Profit Center (Departemen dan Proyek)** aktif di database Accurate dan user mempunyai aksesnya.
