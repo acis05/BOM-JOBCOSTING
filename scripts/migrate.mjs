@@ -34,6 +34,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_wo_org_no ON work_orders(organization_id,w
 
 await c.query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS trial_job_order_used INTEGER NOT NULL DEFAULT 0`);
 await c.query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS trial_rollover_used INTEGER NOT NULL DEFAULT 0`);
+// v0.4.7 - optional BOM/WO detail metadata for Accurate Job Order.
+for(const sql of [
+ `ALTER TABLE bom_materials ADD COLUMN IF NOT EXISTS detail_notes TEXT`,
+ `ALTER TABLE bom_materials ADD COLUMN IF NOT EXISTS department_name TEXT`,
+ `ALTER TABLE bom_materials ADD COLUMN IF NOT EXISTS project_no TEXT`,
+ `ALTER TABLE bom_costs ADD COLUMN IF NOT EXISTS expense_notes TEXT`,
+ `ALTER TABLE bom_costs ADD COLUMN IF NOT EXISTS department_name TEXT`,
+ `ALTER TABLE bom_costs ADD COLUMN IF NOT EXISTS project_no TEXT`,
+ `ALTER TABLE work_order_materials ADD COLUMN IF NOT EXISTS detail_notes TEXT`,
+ `ALTER TABLE work_order_materials ADD COLUMN IF NOT EXISTS department_name TEXT`,
+ `ALTER TABLE work_order_materials ADD COLUMN IF NOT EXISTS project_no TEXT`,
+ `ALTER TABLE work_order_costs ADD COLUMN IF NOT EXISTS expense_notes TEXT`,
+ `ALTER TABLE work_order_costs ADD COLUMN IF NOT EXISTS department_name TEXT`,
+ `ALTER TABLE work_order_costs ADD COLUMN IF NOT EXISTS project_no TEXT`
+]) await c.query(sql);
+
 // Backfill old trial usage from logs so existing trial accounts do not regain quota after upgrade.
 await c.query(`UPDATE organizations o SET trial_job_order_used=GREATEST(COALESCE(o.trial_job_order_used,0),COALESCE((SELECT COUNT(*)::int FROM sync_logs s WHERE s.organization_id=o.id AND s.action='PUSH_JOB' AND s.status='SUCCESS'),0)) WHERE o.status='TRIAL' OR o.plan_code='TRIAL'`);
 await c.query(`UPDATE organizations o SET trial_rollover_used=GREATEST(COALESCE(o.trial_rollover_used,0),COALESCE((SELECT COUNT(DISTINCT s.entity_id)::int FROM sync_logs s WHERE s.organization_id=o.id AND s.action IN ('PUSH_ROLLOVER','CONFIRM_ROLLOVER') AND s.status IN ('SUCCESS','VERIFY')),0)) WHERE o.status='TRIAL' OR o.plan_code='TRIAL'`);
